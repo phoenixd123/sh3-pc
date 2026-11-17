@@ -1,0 +1,69 @@
+# Bugs
+
+The state of every issue known against this port. "Fixed here" means the defect was found in the code and
+corrected; "open" means it needs the game running to diagnose, and what that takes is written down.
+
+## Fixed in this fork
+
+| Was | What was wrong | Fix |
+| --- | --- | --- |
+| No Windows build | Only Switch and Linux targets existed. The recompiled code was already portable; the platform layer, four PE-COFF assumptions and a header collision were not. | Win32 threads/arena/exception handler (`src/runtime/host.c`), POSIX shim (`src/runtime/win_posix.[ch]`), bridges registered by constructor instead of `__start_/__stop_`, `.incbin` assets emitted as COFF sections, `WINAPI`/`APIENTRY` include order. `docs/BUILD-WINDOWS.md`. |
+| `log=1` did nothing on PC | It was compiled only under `__SWITCH__`, so the setting the README documents produced no `sh3.log` outside the console. | `log=1` now also writes `sh3.log` on every platform. |
+| `_` never printed in the launcher | The glyph bounds were `c >= 95` over a 96-cell atlas (ASCII 32-127), so the last cell, `_`, was skipped, and a DEL byte read past the row. | `c >= 96`. |
+| The port credited nowhere in the game | Attribution lived only in the README, so the running game claimed nothing about who ported it. | A credits screen on first launch and from the launcher menu, with the port author first and the projects it stands on below. |
+| `mod.ini` `priority=` ignored | Two causes: `ini_get` used one buffer for both the file path and the value it read, so every key after the first lost its path; and every mod was given a unique sort key, so the priority tiebreak never ran even once that was fixed. | Separate buffers, and unlisted mods share one order (`INT_MAX`) so `priority=` decides between them. |
+| Mod files invisible to attribute checks | A mod replacing a file was opened from the mod but `GetFileAttributesA` still reported the game's copy, so a size probe saw the wrong file. | The attribute bridge consults the mod loader too. |
+
+## Open
+
+### 1. The FMVs are skipped
+
+`data/movie/*.000` were played through DirectShow on the PC release. The port stubs the DirectShow objects the
+game creates, so nothing reads those files and every movie is skipped.
+
+**What a fix needs, in order:** the container identified (a hex dump of one file's first 64 bytes decides between
+Bink and MPEG-1/program-stream), a decoder for it (FFmpeg's Bink decoder or `pl_mpeg` for MPEG-1 — both are
+single-file friendly), and the graph the game builds (`IGraphBuilder`, `IMediaControl`, `IVideoWindow`,
+`IMediaEvent`) implemented over that decoder, presenting frames through the same D3D8 surface path the game
+already uses for its front-buffer readback. `src/win32` has the COM-in-guest-memory pattern this needs (the D3D8
+device is built the same way).
+
+Not attempted here because it cannot be verified without the files: a decoder that is never run against real
+video is a guess, and a wrong guess is worse than the documented gap.
+
+### 2. Black screen after the Office Building bathroom cutscene
+
+Press any button and play continues, which points at the fade/state machine rather than a crash: something the
+fade-in expects to be signalled never is, so the game sits in its "wait for the screen" state.
+
+**What a fix needs:** reproduce, then `log=1` plus `SH3_COVER=<frame>` to log the functions that run after the
+cutscene and find the one that should have cleared the fade. The pause-menu version of this class of bug (a
+fade-in counted as unfinished, greying Save/Load out) is already diagnosed and fixed in `src/game/sh3.c`
+(`sub_00495B60`), so the same shape of fix is plausible.
+
+### 3. Logos and credits stretched on a wide screen
+
+The Konami and KCET logos and the credits are drawn as full-screen 2D, so at 16:9 they stretch. Gameplay and
+menus are handled: `sub_00682BA0` centres the 2D in a 4:3 area and a whitelist of call sites
+(`full_width_calls` in `src/game/sh3.c`) keeps the elements that are meant to span the screen.
+
+**What a fix needs:** the call sites those screens use, from a `SH3_COVER` trace of the logo sequence — then the
+logo/credits images are either removed from the span-everything behaviour or letterboxed by returning the 4:3
+mapping for their frame. It is a list edit once the addresses are known; guessing the addresses is what breaks
+the other 2D.
+
+### 4. Untested past the first areas
+
+The port has been played to the first areas only. The two crashes that were fixed upstream were the same cause —
+callbacks that the disassembler never found, so the lifter never translated them — and nine more instances were
+fixed at the same time. More of that class will exist.
+
+**What a fix needs:** play it. A crash writes `sh3-crash.log` next to the executable with the last indirect call
+targets and the guest stack, which is exactly what identifies an untranslated callback; `tools/seed_from_log`
+and `tools/observed_seeds.txt` are how those become part of the next `tools/regen.sh` run.
+
+### 5. Save compatibility between versions
+
+Saves, `savedata/key.ini` and the shader cache live next to the executable, as before. A `key.ini` written by an
+older build keeps its old button layout (delete it for the current defaults), and there is no save migration:
+the file format is the game's own.
