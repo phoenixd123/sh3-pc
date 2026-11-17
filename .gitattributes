@@ -1,0 +1,10 @@
+# Binaries: never diffed or line-ending converted.
+*.bmp binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.nro binary
+*.exe binary
+*.dll binary
+*.nsp binary
+*.bin binary
