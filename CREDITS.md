@@ -5,11 +5,11 @@ you need your own copy of Silent Hill 3 for PC.
 
 ## This port
 
-**phoenixd913** (@phoenixdobsonyc on Instagram) — PC (Windows) platform layer, the mod system and HD texture
+**phoenixd123** (@phoenixdobsonyc on Instagram) — PC (Windows) platform layer, the mod system and HD texture
 packs, the launcher's credits screen, and the bug fixes listed in [BUGS.md](BUGS.md).
 
 The name on the credits screen comes from the build: `cmake -DPORT_AUTHOR="Your Name"` (it defaults to
-`phoenixd913`), and `PORT_NAME` sets the title under the menu. The screen shows once on first launch — delete
+`phoenixd123`), and `PORT_NAME` sets the title under the menu. The screen shows once on first launch — delete
 `savedata/port-credits` to see it again — and is always reachable from the launcher's menu.
 
 ## Standing on
