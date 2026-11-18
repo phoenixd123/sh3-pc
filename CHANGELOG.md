@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.0 — first full release
+
+The port is feature-complete for what it set out to be: a Windows build of the recompiled game with mods, HD
+texture packs and one-command settings. 1.0.0 is 0.1.0 with the naming settled and the documentation finished.
+
+- **One name.** The port is credited as `phoenixd123` in the launcher, the splash, the README and the repo URLs;
+  the Instagram handle stays `@phoenixdobsonyc`.
+- **Screenshots** of the launcher and the credits screen in the README, taken from a build of this tree.
+- **`LICENSE`** is MIT, with the third-party licences spelled out in [CREDITS.md](CREDITS.md).
+
+What 1.0 does *not* mean: that the game has been played through. Nothing past the first areas has been tested in
+this fork, and no build has been run against a real copy of the game on the machine it was written on. The known
+issues in [BUGS.md](BUGS.md) are unchanged and each one says what a fix needs.
+
 ## 0.1.0 — first release
 
 The first public release of this project: sh3-nx, which was a Nintendo Switch port, becomes a PC port with mods.

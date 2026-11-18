@@ -6,7 +6,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Who the port is by: the launcher's credits screen, the menu title and the NACP.
-set(PORT_AUTHOR "phoenixd913" CACHE STRING "Name shown in the launcher's credits")
+set(PORT_AUTHOR "phoenixd123" CACHE STRING "Name shown in the launcher's credits")
 set(PORT_NAME "SH3-PC" CACHE STRING "Title shown in the launcher")
 
 file(GLOB GEN CONFIGURE_DEPENDS src/recomp/gen/*.c)
@@ -28,7 +28,7 @@ if(NINTENDO_SWITCH)
   # Built with the devkitPro toolchain (tools/build-switch.sh); OpenGL comes through EGL and mesa.
   target_include_directories(sh3 PRIVATE ${DEVKITPRO}/portlibs/switch/include)
   target_link_libraries(sh3 PRIVATE SDL2 EGL glapi drm_nouveau stdc++ pthread m)
-  nx_generate_nacp(sh3.nacp NAME "Silent Hill 3" AUTHOR "${PORT_AUTHOR}" VERSION "0.1.0")
+  nx_generate_nacp(sh3.nacp NAME "Silent Hill 3" AUTHOR "${PORT_AUTHOR}" VERSION "1.0.0")
   nx_create_nro(sh3 OUTPUT sh3-pc.nro NACP sh3.nacp NOICON)
 elseif(WIN32)
   # Windows: mingw-w64 (MSYS2) or clang, with SDL2's mingw development package. The executable keeps main() and

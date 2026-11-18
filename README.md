@@ -8,7 +8,7 @@
 </div>
 <h1 align=center>Silent Hill 3 — PC (and Switch)</h1>
 
-<p align=center><b>0.1.0</b> — ported to PC by <b>phoenixd913</b></p>
+<p align=center><b>1.0.0</b> — ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
@@ -22,6 +22,20 @@ known bug is in **[BUGS.md](BUGS.md)**.
 > [!NOTE]
 > No game files are included. You need your own copy of the PC game, and you build the executable yourself from
 > it ([Building](#building)); the recompiler reads your `sh3.exe`.
+
+## Screenshots
+
+<div align="center">
+
+| First launch | Credits |
+| --- | --- |
+| ![Warning screen](docs/launcher-splash.png) | ![Credits screen](docs/launcher-credits.png) |
+
+</div>
+
+Both are the launcher running from a build of this tree: the warning screen every launch starts with, and the
+credits screen (first launch, and again from the menu). Gameplay captures need a copy of the game, which this
+machine does not have — see [BUGS.md](BUGS.md).
 
 ## Getting it running on Windows
 
@@ -257,7 +271,7 @@ Switch too (`log=1`). `tools/fuzz.py` checks the lifter's instruction semantics 
 
 ## Credits
 
-The full list is [CREDITS.md](CREDITS.md). This port is by **phoenixd913** (@phoenixdobsonyc on Instagram); it
+The full list is [CREDITS.md](CREDITS.md). This port is by **phoenixd123** (@phoenixdobsonyc on Instagram); it
 started from **sh3-nx by cutarev**, and
 the rest of what it stands on — xboxrecomp, sh2-nx, ThirteenAG's widescreen fix, stb, devkitPro, SDL2, Mesa — is
 credited there.

@@ -9,7 +9,7 @@
 /* Who this port is by: the menu and the credits screen show it. CMake passes both in (PORT_AUTHOR, PORT_NAME);
  * these defaults are for a plain compile outside CMake. */
 #ifndef PORT_AUTHOR
-#define PORT_AUTHOR "phoenixd913"
+#define PORT_AUTHOR "phoenixd123"
 #endif
 #ifndef PORT_NAME
 #define PORT_NAME "SH3-PC"
