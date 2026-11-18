@@ -28,3 +28,6 @@ int mods_hd_enabled(void);   /* hd= in sh3.ini and at least one mod */
 /* texdump=1: writes each texture the game uploads to texdump/<key>.png, for pack authors to upscale. */
 int mods_dumping(void);
 void mods_dump_texture(uint64_t key, uint32_t w, uint32_t h, uint32_t fmt, const void *rgba);
+
+/* stb_image_write is compiled in mods.c: one PNG writer for the texture dumps and the F12 screenshots. */
+int mods_write_png(const char *path, int w, int h, int comp, const void *px);

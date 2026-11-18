@@ -111,6 +111,8 @@ static void present(const uint32_t *px, int w, int h) {
 /* ---- the canvas ---- */
 
 static uint32_t canvas[CW * CH];
+static uint32_t *layer = canvas;  /* where text() and image() draw: the canvas, or a screen of its own */
+static int glyph_track;           /* extra pixels between glyphs, for the credits' letterspaced capitals */
 static uint32_t *font_px;
 static int font_w;
 
@@ -120,7 +122,7 @@ static uint32_t rgb(int r, int g, int b) { return 0xFF000000u | b << 16 | g << 8
 static int text(int x, int y, int size, uint32_t color, const char *s) {
     float k = size / 80.0f;
     int adv = (int)(36 * k + 0.5f), cw = (int)(40 * k + 0.5f), ch = size, top = y - (int)(60 * k);
-    for (; *s; s++, x += adv) {
+    for (; *s; s++, x += adv + glyph_track) {
         int c = (unsigned char)*s - 32;
         /* 96 cells: ASCII 32-127, so '_' (95) is the last printable one. It used to be cut off at 95. */
         if (c <= 0 || c >= 96 || !font_px) continue;
@@ -145,7 +147,7 @@ static int text(int x, int y, int size, uint32_t color, const char *s) {
                 float a = ((r0[0] >> 24) * (1 - tx) + (r0[1] >> 24) * tx) * (1 - ty) +
                           ((r1[0] >> 24) * (1 - tx) + (r1[1] >> 24) * tx) * ty;
                 if (a < 1) continue;
-                uint32_t *d = &canvas[oy * CW + ox], o = 0xFF000000u;
+                uint32_t *d = &layer[oy * CW + ox], o = 0xFF000000u;
                 for (int sh = 0; sh < 24; sh += 8) {
                     float v = ((*d >> sh) & 0xFF) + (((color >> sh) & 0xFF) - (float)((*d >> sh) & 0xFF)) * a / 255;
                     o |= (uint32_t)v << sh;
@@ -174,7 +176,7 @@ static void image(const uint32_t *img, int w, int h, int x, int y, int dw, int d
                 for (int j = 0; j < 3; j++) c[j] += ((q[i] >> 8 * j) & 0xFF) * qa;
             }
             if (a < 1) continue;
-            uint32_t *d = &canvas[(y + py) * CW + x + px], o = 0xFF000000u;
+            uint32_t *d = &layer[(y + py) * CW + x + px], o = 0xFF000000u;
             for (int j = 0; j < 3; j++) {
                 float dv = (*d >> 8 * j) & 0xFF;
                 o |= (uint32_t)(dv + (c[j] / a - dv) * a / 255) << 8 * j;
@@ -186,6 +188,13 @@ static void image(const uint32_t *img, int w, int h, int x, int y, int dw, int d
 
 static int text_w(int size, const char *s) { return (int)strlen(s) * (int)(36 * size / 80.0f + 0.5f); }
 static void text_c(int y, int size, uint32_t color, const char *s) { text((CW - text_w(size, s)) / 2, y, size, color, s); }
+/* Centred, with extra pixels between the glyphs: the credits' small letterspaced capitals. */
+static void text_ct(int y, int size, uint32_t color, const char *s, int track) {
+    int n = (int)strlen(s), adv = (int)(36 * size / 80.0f + 0.5f);
+    glyph_track = track;
+    text((CW - (n * (adv + track) - track)) / 2, y, size, color, s);
+    glyph_track = 0;
+}
 
 /* ---- sh3.ini ---- */
 
@@ -319,6 +328,7 @@ static int poll_input(void) {
 #define C_TEXT 0xFFC8C8C8u  /* rgb(200, 200, 200) */
 #define C_DIM 0xFF6E6E6Eu   /* rgb(110, 110, 110) */
 #define C_SEL 0xFF1E28DCu   /* rgb(220, 40, 30) */
+#define C_RULE 0xFF4A4646u  /* rgb(70, 70, 74): the credits' rules */
 
 static uint32_t *logo_px;
 static int logo_w, logo_h;
@@ -335,35 +345,101 @@ static void draw_menu(int sel) {
 }
 
 /* ---- credits ---- */
+/* The port's own credits, rolled the way an ending is: black, thin letterspaced capitals for the labels and the
+ * names under them, coming up out of the dark and going back into it at the top. The font is ASCII, so no em
+ * dashes or (c) glyphs. */
 
 static void fade(int in);  /* below: the credits screen fades like the others */
 
-/* The port's own credits, on the first launch and from the menu. The font is ASCII, so no em dashes or (c)
- * glyphs; "by" lines are what matters. An empty line is a gap. */
-typedef struct { const char *text; int size; uint32_t colour; } CreditLine;
-static const CreditLine credit_lines[] = {
-    {"Silent Hill 3 - PC", 44, C_TEXT},
-    {"Port by " PORT_AUTHOR, 28, C_SEL},
-    {"@phoenixdobsonyc on instagram", 20, C_DIM},
-    {"", 0, 0},
-    {"Silent Hill 3 by Konami / Team Silent", 26, C_DIM},
-    {"", 0, 0},
-    {"Built on sh3-nx (cutarev) and xboxrecomp (sp00nznet);", 20, C_DIM},
-    {"full credits and licences in CREDITS.md", 20, C_DIM},
-    {"", 0, 0},
-    {"Unofficial port. No game files are included.", 20, C_DIM},
-};
+enum { CR_TITLE, CR_RULE, CR_GAP, CR_LABEL, CR_VALUE, CR_NOTE };
+typedef struct { int kind; const char *text; } Credit;
 
-static void draw_credits(void) {
-    for (int i = 0; i < CW * CH; i++) canvas[i] = C_BG;
-    int y = 110;
-    for (size_t i = 0; i < sizeof credit_lines / sizeof *credit_lines; i++) {
-        const CreditLine *l = &credit_lines[i];
-        if (!l->text[0]) { y += 20; continue; }
-        text_c(y, l->size, l->colour, l->text);
-        y += l->size + 14;
+static const Credit credit_roll[] = {
+    {CR_TITLE, "SILENT HILL 3"},
+    {CR_RULE, NULL},
+    {CR_GAP, NULL},
+    {CR_LABEL, "PORTED TO PC BY"},
+    {CR_VALUE, PORT_AUTHOR},
+    {CR_GAP, NULL},
+    {CR_LABEL, "INSTAGRAM"},
+    {CR_VALUE, "@phoenixdobsonyc"},
+    {CR_GAP, NULL},
+    {CR_LABEL, "ORIGINAL GAME"},
+    {CR_VALUE, "Konami / Team Silent"},
+    {CR_GAP, NULL},
+    {CR_LABEL, "RECOMPILATION"},
+    {CR_VALUE, "sh3-nx - cutarev"},
+    {CR_VALUE, "xboxrecomp - sp00nznet"},
+    {CR_GAP, NULL},
+    {CR_LABEL, "EVERYTHING ELSE"},
+    {CR_VALUE, "CREDITS.md"},
+    {CR_GAP, NULL},
+    {CR_GAP, NULL},
+    {CR_NOTE, "Unofficial fan port. No game files are included:"},
+    {CR_NOTE, "it runs the copy of Silent Hill 3 for PC that you own."},
+};
+#define N_CREDITS (int)(sizeof credit_roll / sizeof *credit_roll)
+
+/* How much of the roll one entry takes, drawn or not. */
+static int credit_h(int kind) {
+    switch (kind) {
+    case CR_TITLE: return 46 + 22;
+    case CR_RULE: return 1 + 26;
+    case CR_GAP: return 30;
+    case CR_LABEL: return 18 + 14;
+    case CR_VALUE: return 30 + 30;
+    default: return 17 + 10;  /* CR_NOTE */
     }
-    text_c(CH - 34, 24, C_DIM, "A: back");
+}
+
+/* A thin rule under the title. */
+static void rule(int y, int w) {
+    if (y < 0 || y >= CH) return;
+    for (int x = (CW - w) / 2; x < (CW + w) / 2; x++) layer[y * CW + x] = C_RULE;
+}
+
+/* One entry with its first line at y: drawn when draw is set, and y advanced past it either way. */
+static void credit(const Credit *c, int *y, int draw) {
+    switch (c->kind) {
+    case CR_TITLE: if (draw) text_ct(*y, 46, C_TEXT, c->text, 12); break;
+    case CR_RULE: if (draw) rule(*y + 8, 300); break;
+    case CR_LABEL: if (draw) text_ct(*y, 18, C_DIM, c->text, 7); break;
+    case CR_VALUE: if (draw) text_ct(*y, 30, C_TEXT, c->text, 2); break;
+    case CR_NOTE: if (draw) text_ct(*y, 17, C_DIM, c->text, 1); break;
+    }
+    *y += credit_h(c->kind);
+}
+
+static int credits_height(void) {
+    int y = 0;
+    for (int i = 0; i < N_CREDITS; i++) credit(&credit_roll[i], &y, 0);
+    return y;
+}
+
+/* The roll with its first line at top, then the top and bottom of the screen taken down to black, so lines come
+ * in and go out instead of appearing and vanishing at an edge. */
+static void draw_credits(int top) {
+    for (int i = 0; i < CW * CH; i++) canvas[i] = C_BG;
+    layer = canvas;
+    int y = top;
+    for (int i = 0; i < N_CREDITS; i++) credit(&credit_roll[i], &y, 1);
+    static uint8_t mask[CH];
+    static int ready;
+    if (!ready) {
+        ready = 1;
+        for (int r = 0; r < CH; r++) {
+            int a = r * 255 / 130, b = (CH - 1 - r) * 255 / 190, v = a < b ? a : b;
+            mask[r] = (uint8_t)(v > 255 ? 255 : v);
+        }
+    }
+    for (int r = 0; r < CH; r++) {
+        uint32_t k = mask[r];
+        if (k == 255) continue;
+        for (int x = 0; x < CW; x++) {
+            uint32_t *d = &canvas[r * CW + x];
+            *d = 0xFF000000u | ((*d & 0xFF00FFu) * k >> 8 & 0xFF00FFu) | ((*d & 0xFF00u) * k >> 8 & 0xFF00u);
+        }
+    }
 }
 
 /* The marker file that makes the credits a first-launch screen, next to the saves (or beside the exe if there
@@ -383,16 +459,22 @@ static int credits_seen(void) {
     return f != NULL;
 }
 
+/* The roll runs once, from below the screen to above it, in about half a minute; A or B leaves at any point. */
 static void credits(void) {
-    draw_credits();
+    const int height = credits_height(), speed = 60;  /* pixels per second */
+    Uint64 t0 = SDL_GetTicks64();
+    draw_credits(CH + 20);
     fade(1);
     for (;;) {
+        int top = CH + 20 - (int)((SDL_GetTicks64() - t0) * (Uint64)speed / 1000);
+        if (top < -height - 20) break;
+        draw_credits(top);
         present(canvas, CW, CH);
         int in = poll_input();
         if (in == IN_OK || in == IN_BACK) break;
+        SDL_Delay(8);
     }
     sound(SND_OK);
-    fade(0);
     FILE *f = credits_file("wb");
     if (f) fclose(f);
 }

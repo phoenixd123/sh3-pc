@@ -49,6 +49,7 @@ _Noreturn void rt_fatal(const char *fmt, ...) __attribute__((format(printf, 1, 2
 void rt_dump_thread(void);
 extern int rt_frame;                 /* frames presented so far */
 extern int rt_trace;                 /* SH3_TRACE=1: log every bridged call */
+extern int rt_shot_request;           /* F12 (user32.c): write a PNG of the next presented frame */
 extern char rt_game_dir[512];        /* folder with sh3.exe and data/ */
 extern int rt_hd_textures;            /* hd= in sh3.ini: mods' texture packs replace the game's textures */
 extern int rt_aniso;                  /* aniso= in sh3.ini: anisotropic filtering, 1 = off */

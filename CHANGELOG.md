@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0 — a launcher that finds the game, a real credit roll, F12 screenshots
+
+- **The port asks for the game.** Started without an argument it opens the Windows folder picker, checks that
+  `sh3.exe` and `data/` are in the folder and saves it in `sh3-pc.ini` beside its own executable; later launches go
+  straight to the launcher. A path argument, `SH3_DIR` and "drop the executable in the game folder" still work, a
+  folder that is not the game is refused with a message, and an `sh3.exe` of the wrong size is logged instead of
+  crashing silently.
+- **The credits are a credit roll**, not a card: letterspaced capitals, the names under the labels, scrolling out of
+  and back into black in about 26 seconds, skippable with A.
+- **F12** writes the presented frame to `screenshots/sh3-<date>-<time>.png`, at the game's resolution.
+- Docs: what the 2003 release shipped on, what its copy protection did, why the recompiler needs the unprotected
+  executable, and that the PS2 release is not a substitute.
+
 ## 1.0.0 â€” first full release
 
 The port is feature-complete for what it set out to be: a Windows build of the recompiled game with mods, HD

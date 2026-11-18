@@ -185,3 +185,7 @@ void mods_dump_texture(uint64_t key, uint32_t w, uint32_t h, uint32_t fmt, const
         fclose(idx);
     }
 }
+
+int mods_write_png(const char *path, int w, int h, int comp, const void *px) {
+    return stbi_write_png(path, w, h, comp, px, comp * w);
+}

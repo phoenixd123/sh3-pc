@@ -3,6 +3,7 @@
  * for why kernel32.c cannot. */
 #include <windows.h>
 #include "win_posix.h"
+#include <shlobj.h>  /* SHBrowseForFolderA: the launcher asks for the game folder with the shell's dialog */
 
 /* ---- locks ----
  * Created on first use, so a static PTHREAD_MUTEX_INITIALIZER (all zeroes) is still valid. The slot is
@@ -144,3 +145,39 @@ int closedir(DIR *dir) {
     free(d);
     return 0;
 }
+
+/* ---- the launcher's folder picker ----
+ * The port asks for the game folder with the shell's own dialog: it is the picker every Windows program uses, it
+ * handles network paths and long names, and it needs no GL context or SDL window. The folder the port used last
+ * is selected when the dialog opens. */
+static int CALLBACK pick_init(HWND h, UINT msg, LPARAM lp, LPARAM data) {
+    (void)lp;
+    if (msg == BFFM_INITIALIZED && data) SendMessageA(h, BFFM_SETSELECTIONA, TRUE, data);
+    return 0;
+}
+
+int win_pick_folder(const char *title, const char *start, char *out, size_t n) {
+    char shown[MAX_PATH] = "";
+    BROWSEINFOA bi;
+    memset(&bi, 0, sizeof bi);
+    bi.lpszTitle = title;
+    bi.pszDisplayName = shown;
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX;
+    bi.lpfn = pick_init;
+    bi.lParam = start && *start ? (LPARAM)start : 0;
+    int ok = 0;
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    LPITEMIDLIST id = SHBrowseForFolderA(&bi);
+    if (id) {
+        char path[MAX_PATH];
+        if (SHGetPathFromIDListA(id, path) && path[0]) {
+            snprintf(out, n, "%s", path);
+            ok = 1;
+        }
+        CoTaskMemFree(id);
+    }
+    CoUninitialize();
+    return ok;
+}
+
+void win_message(const char *title, const char *text) { MessageBoxA(NULL, text, title, MB_OK | MB_ICONINFORMATION); }
