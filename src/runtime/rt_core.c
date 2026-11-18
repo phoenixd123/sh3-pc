@@ -4,6 +4,7 @@
 #endif
 #include "rt.h"
 #include "../mods/mods.h"
+#include "fs.h"  /* stat_t, S_ISDIR: is this folder the game? */
 #include <stdarg.h>
 #ifndef _WIN32
 #include <pthread.h>
@@ -37,6 +38,7 @@ RECOMP_TLS volatile uint64_t g_icall_count;
 
 int rt_trace;
 char rt_game_dir[512] = ".";
+int rt_shot_request;  /* F12 (user32.c rt_pump_events) asked for a screenshot at the next frame */
 int rt_hd_textures = 1;  /* hd=0 in sh3.ini turns mod texture packs off */
 int rt_aniso = 8;        /* aniso=1 in sh3.ini turns anisotropic filtering off */
 
@@ -521,9 +523,99 @@ static void game_thread(void *unused) {
     exit(0);
 }
 
+/* ---- the game folder ------------------------------------------------------------------------------
+ * Where sh3.exe and data/ live. Without an argument the launcher finds it: the folder on the command line,
+ * SH3_DIR, the one it saved beside its own executable, the executable's folder itself, the working directory,
+ * and then a folder picker. A folder is the game's when it holds sh3.exe and data/. */
+#define GAME_CONFIG "sh3-pc.ini"    /* the port's own settings, beside the port's executable: game=<folder> */
+#define GAME_EXE_BYTES 3338240L     /* the build the recompiled code was generated from (docs/BUILD-WINDOWS.md) */
+
+static int is_folder(const char *p) {
+    stat_t st;
+    return p && *p && stat(p, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static long exe_bytes(const char *dir) {
+    char p[600];
+    stat_t st;
+    snprintf(p, sizeof p, "%s/sh3.exe", dir);
+    return stat(p, &st) == 0 && !S_ISDIR(st.st_mode) ? (long)st.st_size : -1;
+}
+
+static int game_folder(const char *dir) {
+    char p[600];
+    if (!is_folder(dir)) return 0;
+    snprintf(p, sizeof p, "%s/data", dir);
+    return exe_bytes(dir) > 0 && is_folder(p);
+}
+
+/* The folder the port's own executable is in. On the Switch it is where the NRO and the game go. */
+static int port_dir(char *out, size_t n) {
+#ifdef _WIN32
+    if (!GetModuleFileNameA(NULL, out, (DWORD)n) || !*out) return 0;
+    char *slash = strrchr(out, '\\');
+#elif !defined(__SWITCH__)
+    ssize_t k = readlink("/proc/self/exe", out, n - 1);
+    if (k <= 0 || (size_t)k >= n - 1) return 0;
+    out[k] = 0;
+    char *slash = strrchr(out, '/');
+#else
+    snprintf(out, n, "sdmc:/switch/sh3-pc");  /* no argv on the console: the NRO's folder is the game folder */
+    return 1;
+#endif
+    if (!slash) return 0;
+    *slash = 0;
+    return 1;
+}
+
+static int config_path(char *out, size_t n) {
+    char dir[512];
+    if (!port_dir(dir, sizeof dir) || strlen(dir) + sizeof GAME_CONFIG + 2 >= n) return 0;
+    snprintf(out, n, "%s/%s", dir, GAME_CONFIG);
+    return 1;
+}
+
+/* The folder the launcher last used ("game=" on its own line, leading spaces and # comments allowed). */
+static int saved_game(char *out, size_t n) {
+    char cfg[600], line[600];
+    if (!config_path(cfg, sizeof cfg)) return 0;
+    FILE *f = fopen(cfg, "r");
+    if (!f) return 0;
+    while (fgets(line, sizeof line, f)) {
+        char *p = line, *e;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "game", 4)) continue;
+        p += 4;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p++ != '=') continue;
+        while (*p == ' ' || *p == '\t') p++;
+        e = p + strlen(p);
+        while (e > p && (e[-1] == '\n' || e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) *--e = 0;
+        if (*p) {
+            snprintf(out, n, "%s", p);
+            fclose(f);
+            return 1;
+        }
+    }
+    fclose(f);
+    return 0;
+}
+
+static void save_game(const char *dir) {
+    char cfg[600], old[600];
+    if (!config_path(cfg, sizeof cfg)) return;
+    if (saved_game(old, sizeof old) && !strcmp(old, dir)) return;  /* already how it was */
+    FILE *f = fopen(cfg, "w");
+    if (!f) { rt_log("cannot write %s", cfg); return; }
+    fprintf(f, "# written by the launcher: the folder holding sh3.exe and data/\ngame=%s\n", dir);
+    fclose(f);
+    rt_log("launcher: the game folder is %s (saved in %s)", dir, cfg);
+}
+
 int main(int argc, char **argv) {
+    char dir[700] = "";
 #ifdef __SWITCH__
-    const char *dir = "sdmc:/switch/sh3-pc";
+    snprintf(dir, sizeof dir, "sdmc:/switch/sh3-pc");
     (void)argc; (void)argv;
     if (__nxlink_host.s_addr) {  /* launched by nxlink: stdout/stderr and the log go back to the PC */
         socketInitializeDefault();
@@ -531,10 +623,63 @@ int main(int argc, char **argv) {
         else socketExit();
     }
 #else
-    const char *dir = argc > 1 ? argv[1] : getenv("SH3_DIR");
+    /* An argument (or SH3_DIR) that is not the game is an error, not a reason to ask: it is what a shortcut or a
+     * script passes, and quietly using another folder would hide the mistake. */
+    const char *given = argc > 1 && argv[1][0] ? argv[1] : getenv("SH3_DIR");
+    if (given) {
+        if (!game_folder(given)) {
+            rt_log("%s is not a Silent Hill 3 folder: it needs sh3.exe and data/", given);
+#ifdef _WIN32
+            win_message("Silent Hill 3", "That folder is not a Silent Hill 3 install.\n\n"
+                                        "Pick the folder that holds sh3.exe and data/.");
 #endif
-    if (dir) snprintf(rt_game_dir, sizeof rt_game_dir, "%s", dir);
+            return 1;
+        }
+        snprintf(dir, sizeof dir, "%s", given);
+    } else {
+        char here[700] = "", start[700] = "";
+        if (saved_game(dir, sizeof dir) && !game_folder(dir)) dir[0] = 0;
+        if (!dir[0] && port_dir(here, sizeof here) && game_folder(here)) snprintf(dir, sizeof dir, "%s", here);
+        if (!dir[0] && game_folder(".")) snprintf(dir, sizeof dir, ".");
+        if (!dir[0]) saved_game(start, sizeof start);  /* where the picker opens: the folder it used last */
+#ifdef _WIN32
+        /* First launch: the shell's folder picker, until it names a folder that is the game or is closed. */
+        while (!dir[0]) {
+            if (!win_pick_folder("Where is Silent Hill 3 installed? Pick the folder that holds sh3.exe and data/",
+                                 start, dir, sizeof dir))
+                break;
+            if (game_folder(dir)) break;
+            win_message("Silent Hill 3", "That folder has no sh3.exe and data/ in it.\n\n"
+                                        "Pick the folder the game was installed into.");
+            dir[0] = 0;
+        }
+#endif
+    }
+#endif
+    if (!dir[0]) {
+        rt_log("no game folder: pass the Silent Hill 3 folder as the first argument, set SH3_DIR, or put the "
+               "port's executable in the game folder (sh3.exe and data/ beside it)");
+        return 1;
+    }
+    /* Absolute, so the log, the saves and the shader cache name the same folder however the port was started. */
+    char full[700];
+#ifdef _WIN32
+    const char *root = _fullpath(full, dir, sizeof full) ? full : dir;
+#elif !defined(__SWITCH__)
+    const char *root = realpath(dir, full) ? full : dir;
+#else
+    const char *root = dir;
+#endif
+    snprintf(rt_game_dir, sizeof rt_game_dir, "%s", root);
     if (chdir(rt_game_dir)) rt_fatal("cannot enter %s", rt_game_dir);
+#ifndef __SWITCH__
+    save_game(rt_game_dir);
+#endif
+    long bytes = exe_bytes(rt_game_dir);
+    if (bytes != GAME_EXE_BYTES)
+        rt_log("warning: sh3.exe is %ld bytes; this build's recompiled code is the %ld-byte copy, so a different "
+               "executable will crash (see README, \"Where the game files come from\")", bytes, (long)GAME_EXE_BYTES);
+    mods_init();  /* mods/ under the game folder, before anything loads an asset */
     mods_init();  /* mods/ under the game folder, before anything loads an asset */
     rt_trace = getenv("SH3_TRACE") != NULL;
     if (getenv("SH3_COVER")) cover_from = abs(atoi(getenv("SH3_COVER"))), cover_all = atoi(getenv("SH3_COVER")) < 0;

@@ -8,7 +8,7 @@
 </div>
 <h1 align=center>Silent Hill 3 â€” PC (and Switch)</h1>
 
-<p align=center><b>1.0.0</b> â€” ported to PC by <b>phoenixd123</b></p>
+<p align=center><b>1.1.0</b> â€” ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
@@ -29,29 +29,65 @@ known bug is in **[BUGS.md](BUGS.md)**.
 
 | First launch | Credits |
 | --- | --- |
-| ![Warning screen](docs/launcher-splash.png) | ![Credits screen](docs/launcher-credits.png) |
+| ![Warning screen](docs/launcher-splash.png) | ![Credits roll](docs/launcher-credits.png) |
 
 </div>
 
-Both are the launcher running from a build of this tree: the warning screen every launch starts with, and the
-credits screen (first launch, and again from the menu). Gameplay captures need a copy of the game, which this
-machine does not have â€” see [BUGS.md](BUGS.md).
+Both are the port running from a build of this tree: the warning screen every launch starts with, and the credits
+roll (on the first launch, and again from the menu).
+
+**There are no gameplay screenshots here yet, because they cannot be made without the game.** Taking one is a
+single key: press **F12** in game and the frame it was pressed on is written to `screenshots/sh3-<date>-<time>.png`
+in the game folder, at the game's own resolution. That is what belongs in this table — nothing here is a mock-up or
+a render of what the port might look like.
 
 ## Getting it running on Windows
 
-1. **Your own game.** Silent Hill 3 for PC installed, with `sh3.exe` of 3,338,240 bytes (SHA-1
-   `aa2aca6dba19bf510c9c2e92eefdc15e98266581`) and its `data/` folder (about 5 GB).
+1. **Your own game.** Silent Hill 3 for PC installed — the 2003 release, `sh3.exe` of 3,338,240 bytes (SHA-1
+   `aa2aca6dba19bf510c9c2e92eefdc15e98266581`) and its `data/` folder (about 5 GB). Which executable that is, and
+   why the retail disc on its own is not enough, is
+   [the next section](#where-the-game-files-come-from).
 2. **Build once, from your copy.** There is no binary download: the recompiler turns your `sh3.exe` into C, so a
    build belongs to the copy of the game it was made from. MSYS2, SDL2 and CMake, about 15 minutes:
    [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md).
-3. **Run it against the game folder.** `build/windows/sh3.exe` takes that folder as its argument, or run it from
-   inside the folder; `SDL2.dll` goes next to the port's executable.
+3. **Start it.** `build/windows/sh3.exe`, with `SDL2.dll` beside it. The first launch asks for the game folder with
+   the usual Windows folder picker; pick the folder that holds `sh3.exe` and `data/`, and the port checks it and
+   remembers it in `sh3-pc.ini` beside its own executable, so later launches go straight to the launcher. A path
+   argument (`sh3.exe "D:/Games/Silent Hill 3"`) or `SH3_DIR` answers the question up front, and so does dropping
+   the port's executable into the game folder.
 4. **Mods are optional**: a `mods/` folder beside the game, with HD texture packs in it ([MODDING.md](MODDING.md)).
+5. **Screenshots**: **F12** in game writes `screenshots/sh3-<date>-<time>.png`.
+
+## Where the game files come from
+
+Silent Hill 3 for PC was never sold digitally. In 2003 it shipped on **five CDs in North America** and on **one
+DVD in Europe**, installed about 5 GB into a folder you chose, and checked that the disc was in the drive every
+time it started (SecuROM 4.85). The installer's **Movies** option is the FMVs: leave it checked, or `data/movie/`
+stays empty.
+
+None of that runs here. The port reads the executable as a file, recompiles its functions and supplies its own
+Windows layer, so at run time there is **no disc check, no SecuROM, no installer and no optical drive**.
+
+What it does need is the *unprotected* executable, which is why the size and SHA-1 above are pinned:
+
+- the retail `sh3.exe` is wrapped — part of its code is encrypted in the file and only becomes the code the game
+  executes after SecuROM's loader has decrypted it;
+- a static recompiler translates the bytes in the file. Given the wrapped executable it translates the wrapper,
+  not the game.
+
+So the executable to point at is the one the game actually runs as — the same one the community's no-CD/fixed
+executables are. Install from your disc (or a backup image of it), then use the executable that belongs to that
+install. If `sh3.exe` is a different size the port says so in the log instead of pretending: a build made from a
+different executable will crash, not run.
+
+**The PlayStation 2 release cannot be used.** It is a MIPS binary with its own data formats and no Win32 layer to
+reimplement; this port is a recompilation of the PC build, and doing the PS2 version would be a different project
+from the ground up.
 
 ## Features
 
 - **Native code**: every function of `sh3.exe` runs as native code for the machine you build it on â€” x86-64 on PC, ARM64 on the Switch. No emulator, no Wine.
-- **Launcher**: Play and Options before the game; Options changes the resolution and the game threads in `sh3.ini`
+- **Launcher**: it asks for the game folder once and remembers it, then Play and Options before the game; Options changes the resolution and the game threads in `sh3.ini`
   on the console.
 - **Widescreen**: 16:9 at 1280x720 by default, 1920x1080 for docked play, or the original 4:3
   (ThirteenAG's WidescreenFix, ported). The camera widens in gameplay, cutscenes keep their framing without the
@@ -209,6 +245,9 @@ to move and turn, Space for action, Return / Escape to confirm / cancel.
 | `hd=1` | read HD texture packs from `mods/` (the default); `hd=0` uses the game's own textures |
 | `aniso=8` | anisotropic filtering, 1-16 (default 8, `1` = off) |
 | `texdump=1` | write every texture the game uploads to `texdump/`, for making a pack |
+
+The port keeps one file of its own beside its executable: `sh3-pc.ini`, holding `game=`, the folder the launcher
+was pointed at. In game, **F12** writes `screenshots/sh3-<date>-<time>.png` next to `sh3.exe`.
 
 ## Building
 

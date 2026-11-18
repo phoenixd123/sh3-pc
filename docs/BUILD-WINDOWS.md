@@ -43,15 +43,21 @@ cmake -S . -B build/windows -G Ninja
 cmake --build build/windows
 ```
 
-That produces `build/windows/sh3.exe`. Run it with the game folder as the argument, or from inside it:
+That produces `build/windows/sh3.exe`. Copy `SDL2.dll` next to it and start it:
 
-```sh
-cd game
-../build/windows/sh3.exe .
-```
+- with no arguments the launcher opens the Windows folder picker and asks for the game folder, checks that
+  `sh3.exe` and `data/` are in it, and remembers it in `sh3-pc.ini` beside the port's executable, so the next
+  launch goes straight to the launcher;
+- or pass the folder: `build/windows/sh3.exe "C:/Games/Silent Hill 3"`, or set `SH3_DIR`;
+- or drop the port's executable into the game folder — the executable's own folder is checked before the picker.
 
-`sh3.exe` and its `data/` folder must be in the working directory. Saves, settings, the shader cache
-(`sh3-progs.bin`) and `sh3.log` are written there too.
+A folder is the game's when it holds `sh3.exe` (3,338,240 bytes) and `data/`. A different `sh3.exe` size is logged
+as a warning and the port carries on, but the recompiled code belongs to the pinned build, so it will crash:
+regenerate with your own copy instead. `sh3.ini`, saves, the shader cache (`sh3-progs.bin`) and `sh3.log` are
+written in the game folder; `sh3-pc.ini`, with the folder, next to the port's executable.
+
+In game, **F12** writes `screenshots/sh3-<date>-<time>.png` in the game folder: the frame the game presented, at
+its own resolution, not the window's.
 
 ## Windows specifics
 
@@ -86,6 +92,9 @@ the recompiled game code because **no game files were available**:
 - The launcher runs with a real OpenGL context: the warning screen and launcher are drawn (which exercises the
   COFF `.incbin` assets, the SDL window and the GL loader), and it stays interactive.
 - Fatal errors go to the console and to `sh3-crash.log` through the vectored exception handler.
+- The launcher's folder picker (`win_pick_folder`, `src/runtime/win_posix.c`) and its "that folder is not the
+  game" message box compile and link; the picker itself was not driven here, because that needs a game folder to
+  point it at.
 
 **Not verified:** anything past the launcher, because that needs `sh3.exe` and `data/`. In particular the
 recompiled game code, the D3D8â†’GL translation under real load, HD texture replacement on a real texture, audio,

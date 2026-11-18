@@ -1,6 +1,15 @@
 /* IDirect3D8 and IDirect3DDevice8 on OpenGL. */
 #include "d3d8.h"
+#include "../mods/mods.h"
 #include <math.h>
+#include <time.h>
+#ifdef _WIN32
+#include <direct.h>
+#define make_dir(p) _mkdir(p)
+#else
+#include <sys/stat.h>
+#define make_dir(p) mkdir(p, 0755)
+#endif
 
 Dev *dev;
 static uint32_t d3d_obj;
@@ -301,6 +310,33 @@ METHOD(dev_SetCursorPosition, 4) { return 0; }
 METHOD(dev_ShowCursor, 2) { return 0; }
 METHOD(dev_Reset, 2) { device_reset(ARG(1)); return 0; }
 
+/* F12: the frame the game presented (not the letterboxed window) as a PNG in screenshots/, which is what the
+ * README's gameplay shots are and what a bug report needs. GL's row 0 is the bottom, so the rows are flipped. */
+static void screenshot(Res *bb) {
+    char path[512];
+    struct tm *lt;
+    time_t now = time(NULL);
+    make_dir("screenshots");
+    if (!(lt = localtime(&now))) return;
+    snprintf(path, sizeof path, "screenshots/sh3-%04d%02d%02d-%02d%02d%02d.png", lt->tm_year + 1900,
+             lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+    uint8_t *px = malloc((size_t)bb->w * bb->h * 3);
+    if (!px) return;
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, bb->w, bb->h, GL_RGB, GL_UNSIGNED_BYTE, px);
+    for (int y = 0; y < (int)bb->h / 2; y++) {
+        uint8_t *a = px + (size_t)y * bb->w * 3, *b = px + (size_t)(bb->h - 1 - y) * bb->w * 3;
+        for (uint32_t i = 0; i < bb->w * 3; i++) {
+            uint8_t v = a[i];
+            a[i] = b[i];
+            b[i] = v;
+        }
+    }
+    if (mods_write_png(path, (int)bb->w, (int)bb->h, 3, px)) rt_log("screenshot: %s", path);
+    else rt_log("screenshot: cannot write %s", path);
+    free(px);
+}
+
 METHOD(dev_Present, 5) {
     int ww, wh;
     SDL_GL_GetDrawableSize(rt_window, &ww, &wh);
@@ -316,6 +352,7 @@ METHOD(dev_Present, 5) {
     int dw = bb->w * s, dh = bb->h * s, dx = (ww - dw) / 2, dy = (wh - dh) / 2;
     glBlitFramebuffer(0, 0, bb->w, bb->h, dx, dy + dh, dx + dw, dy, GL_COLOR_BUFFER_BIT, GL_LINEAR);
     res_snapshot_front();
+    if (rt_shot_request) { rt_shot_request = 0; screenshot(bb); }
     static int frame;
     rt_frame++;
     /* debugging: SH3_SHOT=dir writes frames 0-9, then every SH3_SHOT_EVERY-th (30), as PPM */

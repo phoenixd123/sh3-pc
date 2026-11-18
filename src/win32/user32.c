@@ -68,8 +68,10 @@ static int quit_posted;
 
 void rt_pump_events(void) {
     SDL_Event e;
-    while (SDL_PollEvent(&e))
+    while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) { rt_log("window closed"); quit_posted = 1; }
+        else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F12) rt_shot_request = 1;
+    }
 }
 
 WINAPI(LoadCursorA, "LoadCursorA", 2) { return 1; }
