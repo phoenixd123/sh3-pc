@@ -110,6 +110,9 @@ from the ground up. Point the launcher at a PS2 image and it says exactly that, 
 - **Mods**: a `mods/` folder next to the game, with loose-file overrides for any file the game reads and **HD
   texture packs** ([MODDING.md](MODDING.md)). No game content ships with them; a pack is built from your own copy
   with `tools/make_hd_pack.py`.
+- **PS2-exclusive costumes, from your own copy**: `tools/ps2_outfits.py` appends models you convert from your own
+  PS2 disc to copies of `chrpl.arc` and `arc.arc` and writes them as a mod folder, and `patches/*.patch` carries
+  the executable's outfit tables into the build ([MODDING.md](MODDING.md)). Nothing from the game ships here.
 - **Anisotropic filtering** (`aniso=` in `sh3.ini`), which is also what keeps an HD texture sharp at grazing
   angles.
 

@@ -10,14 +10,19 @@ mkdir -p "$B"
 cd "$ROOT"
 if [ "$1" != --recomp-only ]; then
 "$PY" tools/patch_exe.py game/sh3.exe "$B/sh3_ws.exe"  # widescreen code patches
-"$PY" tools/pe2xbe.py "$B/sh3_ws.exe" "$B/sh3.xbe" --imports "$B/imports.json"
+IMAGE="$B/sh3_ws.exe"
+if [ -d patches ] && [ -n "$(ls patches/*.patch 2>/dev/null)" ]; then
+"$PY" tools/patch_image.py "$B/sh3_ws.exe" -o "$B/sh3_patched.exe" patches/*.patch  # outfit tables and other data
+IMAGE="$B/sh3_patched.exe"
+fi
+"$PY" tools/pe2xbe.py "$IMAGE" "$B/sh3.xbe" --imports "$B/imports.json"
 cd "$X"
 "$PY" -m tools.xbe_parser "$B/sh3.xbe" --json "$B/sh3_analysis.json" --quiet
 # Pass 1 finds the code; its immediates and data pointers seed the functions only data refers to.
 "$PY" -m tools.disasm "$B/sh3.xbe" --text-only -o "$B/disasm" --force > "$B/disasm.log" 2>&1
 (cd "$ROOT" && "$PY" tools/seeds.py)
 "$PY" -m tools.disasm "$B/sh3.xbe" --text-only -o "$B/disasm" --force --seed-functions "$B/seeds.json" > "$B/disasm.log" 2>&1
-(cd "$ROOT" && "$PY" tools/fix_functions.py "$B/sh3_ws.exe" "$B/disasm/functions.json")
+(cd "$ROOT" && "$PY" tools/fix_functions.py "$IMAGE" "$B/disasm/functions.json")
 "$PY" -m tools.func_id "$B/sh3.xbe" --functions "$B/disasm/functions.json" --strings "$B/disasm/strings.json" \
     --xrefs "$B/disasm/xrefs.json" -o "$B/func_id" > "$B/func_id.log" 2>&1
 "$PY" -m tools.abi_analysis "$B/sh3.xbe" --disasm-dir "$B/disasm" --func-id-dir "$B/func_id" --output-dir "$B/abi" > "$B/abi.log" 2>&1

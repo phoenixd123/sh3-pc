@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 - PS2 costume tooling, all local
+
+- **`tools/ps2_outfits.py`** builds a mod from converted PS2 costume models: it appends them to copies of the
+  player's own `data/chrpl.arc` and `data/arc.arc`, writes `mods/ps2-outfit-models/`, and can emit the `.zip`
+  that **Options > Install a mod** takes. No models, paths or passwords are bundled.
+- **`patches/*.patch`** applies build-time byte edits to `sh3.exe` before it is lifted (the outfit tables, the
+  password lookup), each checked against the original bytes; `tools/patch_image.py` applies or checks one file
+  on its own. The addresses and table shapes are in MODDING.md.
+
 ## 1.2.0 — mods, installed from the launcher
 
 - **Install a mod, from the game.** Options has an **Install a mod** row that asks for a `.zip`, unpacks it into
