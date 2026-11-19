@@ -470,8 +470,40 @@ static uint64_t now_ns(void) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
 }
-WINAPI(GetTickCount, "GetTickCount", 0) { return (uint32_t)(now_ns() / 1000000); }
-WINAPI(timeGetTime, "timeGetTime", 0) { return (uint32_t)(now_ns() / 1000000); }
+
+/* ---- the clock the guest sees ---- */
+
+/* A freecam holds this still, so animations, physics and the game's own camera stop while the player moves
+ * theirs. The watchdog is for a game that waits for time to pass: after 400 ms without a presented frame,
+ * one frame's worth is released so it cannot wait forever. */
+static uint64_t clock_offset, clock_hold, clock_present_at, clock_release_at;
+static int clock_frozen;
+
+uint64_t rt_clock_ns(void) {
+    uint64_t raw = now_ns();
+    if (!clock_frozen) return raw + clock_offset;
+    if (raw - clock_present_at > 400000000ull && raw - clock_release_at > 400000000ull) {
+        clock_hold += 33000000ull;
+        clock_release_at = raw;
+        rt_log("freecam: the clock is held but the game is waiting for it; releasing one frame");
+    }
+    return clock_hold;
+}
+void rt_clock_freeze(int on) {
+    uint64_t raw = now_ns();
+    if (on && !clock_frozen) {
+        clock_hold = raw + clock_offset;
+        clock_frozen = 1;
+        clock_present_at = clock_release_at = raw;
+    } else if (!on && clock_frozen) {
+        clock_offset = clock_hold - now_ns();  /* the time spent frozen is not given back */
+        clock_frozen = 0;
+    }
+}
+void rt_clock_step_ms(int ms) { if (clock_frozen) clock_hold += (uint64_t)ms * 1000000ull; }
+void rt_clock_present(void) { clock_present_at = now_ns(); }
+WINAPI(GetTickCount, "GetTickCount", 0) { return (uint32_t)(rt_clock_ns() / 1000000); }
+WINAPI(timeGetTime, "timeGetTime", 0) { return (uint32_t)(rt_clock_ns() / 1000000); }
 WINAPI(timeBeginPeriod, "timeBeginPeriod", 1) { return 0; }
 WINAPI(timeEndPeriod, "timeEndPeriod", 1) { return 0; }
 WINAPI(QueryPerformanceFrequency, "QueryPerformanceFrequency", 1) {
@@ -480,7 +512,7 @@ WINAPI(QueryPerformanceFrequency, "QueryPerformanceFrequency", 1) {
     return 1;
 }
 WINAPI(QueryPerformanceCounter, "QueryPerformanceCounter", 1) {
-    uint64_t t = now_ns();
+    uint64_t t = rt_clock_ns();
     MEM32(ARG(0)) = (uint32_t)t;
     MEM32(ARG(0) + 4) = (uint32_t)(t >> 32);
     return 1;

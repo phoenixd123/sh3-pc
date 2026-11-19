@@ -1,5 +1,6 @@
 /* DINPUT8: a keyboard and one gamepad, read from SDL. */
 #include "../runtime/rt.h"
+#include "../d3d8/freecam.h"
 #include <SDL2/SDL.h>
 
 enum { DEV_KEYBOARD = 1, DEV_MOUSE, DEV_PAD };
@@ -402,10 +403,14 @@ METHOD(dev_GetDeviceState, 3) {
     if (kind == DEV_KEYBOARD) {
         int n;
         const uint8_t *k = SDL_GetKeyboardState(&n);
+        uint8_t keys[SDL_NUM_SCANCODES];
+        int count = n < SDL_NUM_SCANCODES ? n : SDL_NUM_SCANCODES;
+        memcpy(keys, k, (size_t)count);
+        freecam_filter_keys(keys, count);  /* the freecam owns WASD and its other keys */
         memset(GPTR(out), 0, size);
         int scripted = getenv("SH3_KEYS") != NULL;  /* a scripted run ignores the real keyboard */
-        for (int i = 0; i < n; i++)
-            if ((scripted ? scripted_key(i) : k[i]) && dik[i] && dik[i] < size) *(uint8_t *)GPTR(out + dik[i]) = 0x80;
+        for (int i = 0; i < count; i++)
+            if ((scripted ? scripted_key(i) : keys[i]) && dik[i] && dik[i] < size) *(uint8_t *)GPTR(out + dik[i]) = 0x80;
     } else if (kind == DEV_PAD) pad_state(THIS, out, size);
     else memset(GPTR(out), 0, size);
     return 0;

@@ -50,6 +50,12 @@ void rt_dump_thread(void);
 extern int rt_frame;                 /* frames presented so far */
 extern int rt_trace;                 /* SH3_TRACE=1: log every bridged call */
 extern int rt_shot_request;           /* F12 (user32.c): write a PNG of the next presented frame */
+/* kernel32.c: the clock the guest sees. The freecam holds it still, so the game's own time does not move
+ * while the camera does; rt_clock_step_ms lets a pose advance one frame at a time. */
+uint64_t rt_clock_ns(void);
+void rt_clock_freeze(int on);
+void rt_clock_step_ms(int ms);
+void rt_clock_present(void);          /* d3d8.c, every presented frame: the freeze watchdog's heartbeat */
 extern char rt_game_dir[512];        /* folder with sh3.exe and data/ */
 /* The launcher's Game location (rt_core.c). rt_game_path follows the path a player gives - a folder, the game's
  * own sh3.exe, or a disc - to the folder it means, or returns a sentence saying what the path was instead;

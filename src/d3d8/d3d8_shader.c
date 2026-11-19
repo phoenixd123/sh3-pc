@@ -1,6 +1,7 @@
 /* GLSL for every draw: the fixed-function pipeline generated from device state, or vs_1_1 / ps_1_x
  * bytecode translated once. Programs are cached by the state that shaped them. */
 #include "d3d8.h"
+#include "freecam.h"
 #include <stdarg.h>
 #include <math.h>
 #include <SDL2/SDL.h>
@@ -791,10 +792,11 @@ void shader_bind_for_draw(int rhw, uint32_t vs, const int *present) {
     }
     if (p->pc >= 0) glUniform4fv(p->pc, 8, &dev->psc[0][0]);
     if (p->wvp >= 0) {
-        float wv[16], wvp[16], vpm[16], nm[9];
+        float wv[16], wvp[16], vpm[16], nm[9], proj[16];
+        freecam_projection(proj, dev->proj);
         mat_mul(wv, dev->world[0], dev->view);
-        mat_mul(wvp, wv, dev->proj);
-        mat_mul(vpm, dev->view, dev->proj);
+        mat_mul(wvp, wv, proj);
+        mat_mul(vpm, dev->view, proj);
         glUniformMatrix4fv(p->wvp, 1, GL_FALSE, wvp);
         if (p->wv >= 0) glUniformMatrix4fv(p->wv, 1, GL_FALSE, wv);
         if (p->viewproj >= 0) glUniformMatrix4fv(p->viewproj, 1, GL_FALSE, vpm);

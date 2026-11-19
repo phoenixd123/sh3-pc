@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.0 - freecam
+
+- **F1 detaches the camera and holds the game's clock.** The game keeps drawing, so the view moves smoothly
+  while the world stands still: WASD and Q/E move, the mouse looks, Shift and Ctrl change the speed, and the
+  wheel scales the field of view without touching near or far. F1 returns to the game where it stopped.
+- **Frame stepping.** `,` and `.` advance the held clock one frame at a time, `[` and `]` ten, which is how a
+  model is posed for a shot. Named animation keyframes are not exposed: their table is in model data the
+  render layer does not read.
+- **A freeze that cannot hang the game.** If nothing presents for 400 ms the port releases one frame and logs
+  it, so a build that waits on its own frame limiter slows down instead of deadlocking.
+
 ## 1.3.0 - PS2 costume tooling, all local
 
 - **`tools/ps2_outfits.py`** builds a mod from converted PS2 costume models: it appends them to copies of the

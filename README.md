@@ -110,6 +110,8 @@ from the ground up. Point the launcher at a PS2 image and it says exactly that, 
 - **Mods**: a `mods/` folder next to the game, with loose-file overrides for any file the game reads and **HD
   texture packs** ([MODDING.md](MODDING.md)). No game content ships with them; a pack is built from your own copy
   with `tools/make_hd_pack.py`.
+- **Freecam**: **F1** holds the game's clock and detaches the camera, with mouse and WASD movement, a
+  wheel-driven field of view, and frame-by-frame stepping to pose a model ([Freecam](#freecam)).
 - **PS2-exclusive costumes, from your own copy**: `tools/ps2_outfits.py` appends models you convert from your own
   PS2 disc to copies of `chrpl.arc` and `arc.arc` and writes them as a mod folder, and `patches/*.patch` carries
   the executable's outfit tables into the build ([MODDING.md](MODDING.md)). Nothing from the game ships here.
@@ -245,6 +247,35 @@ Saves, settings and the shader cache are written next to the NRO.
 Laid out as in sh2-nx; change them in Options > Button Config. A `savedata/key.ini` saved by an older version keeps
 its old layout: delete it to get this one. With a keyboard on PC: W A S D and Q E
 to move and turn, Space for action, Return / Escape to confirm / cancel.
+
+## Freecam
+
+**F1** in game detaches the camera from the game's own and holds the game's clock, so the frame stands still
+while you move around it; **F1** again returns to the game. The scene is still drawn by the game every frame,
+which is why the camera moves smoothly and the HUD and cutscene framing stay right.
+
+| Key | Action |
+| --- | --- |
+| W A S D | move, along the way the camera looks |
+| Q / E | down / up |
+| Shift / Ctrl | four times faster / four times slower |
+| mouse | look |
+| wheel | field of view, 0.25x to 4x |
+| `,` `.` | step the held clock back / forward one frame |
+| `[` `]` | step ten frames |
+
+Stepping is what poses a model: each step advances every animation by exactly one frame of the game's 30 Hz, so
+a walk, an idle or a cutscene can be left on a chosen frame and photographed from any angle. It is frame by
+frame rather than by named keyframes, because an animation's keyframe table lives in model data the render layer
+never sees.
+
+The clock is what stops, not the threads: the game keeps rendering, so nothing has to be suspended and the
+window stays responsive. A game that waits for its clock before drawing the next frame is the one case that
+would hang, so after 400 ms without a frame the port lets one frame through and says so in the log; there the
+freeze becomes a slow advance instead of a deadlock.
+
+It moves the render camera, not the game's: the game still culls what its own camera cannot see, so a view
+pushed far from it can leave geometry out, and the near and far planes stay the game's.
 
 ## Settings
 
