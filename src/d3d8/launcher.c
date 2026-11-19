@@ -3,6 +3,7 @@
  * Drawn on the CPU into a 1280x720 canvas that is blitted to the window, so it needs no shaders and leaves the game
  * a fresh GL state. */
 #include "d3d8.h"
+#include "../mods/mods.h"  /* mods_init: Options > Game folder re-reads mods/ */
 #include <SDL2/SDL.h>
 #include <math.h>
 
@@ -69,8 +70,14 @@ static void sound(int i) {
 static void sound_close(void) {
     for (Uint64 t0 = SDL_GetTicks64(); snd_dev && SDL_GetQueuedAudioSize(snd_dev) && SDL_GetTicks64() - t0 < 1000;) SDL_Delay(10);
     if (snd_dev) SDL_CloseAudioDevice(snd_dev);
-    for (int i = 0; i < 2; i++) SDL_FreeWAV(snd[i].pcm);
+    snd_dev = 0;
+    for (int i = 0; i < 2; i++) SDL_FreeWAV(snd[i].pcm), snd[i].pcm = NULL, snd[i].len = 0;
 }
+
+#ifdef _WIN32
+/* The sounds are read out of the game folder, so they come back with another one. */
+static void sound_reload(void) { sound_close(); sound_init(); }
+#endif
 
 /* Loads a BMP to RGBA rows; NULL if it can't. */
 static uint32_t *decode(const uint8_t *bmp, const uint8_t *end, int *w, int *h) {
@@ -210,6 +217,17 @@ static Opt opts[] = {
     {"Game threads", "cores", {"3", "1"}, {"Three cores", "One core"}},
 };
 #define N_OPTS (int)(sizeof opts / sizeof *opts)
+
+/* The rows under the sh3.ini options: the game location, which lives in the port's own sh3-pc.ini - the install
+ * folder, or sh3.exe and a disc through the open-file dialog - then Back. */
+#ifdef _WIN32
+#define ROW_FOLDER N_OPTS
+#define ROW_DISC (N_OPTS + 1)
+#define ROW_BACK (N_OPTS + 2)
+#else
+#define ROW_BACK N_OPTS
+#endif
+#define N_ROWS (ROW_BACK + 1)
 
 static int n_vals(const Opt *o) { int n = 0; while (n < 4 && o->vals[n]) n++; return n; }
 static const char *opt_name(const Opt *o) { return o->cur < 0 ? o->other : o->names[o->cur]; }
@@ -479,19 +497,51 @@ static void credits(void) {
     if (f) fclose(f);
 }
 
+/* What the last folder pick said, under the hint until the next key. */
+static const char *row_note;
+#ifdef _WIN32
+
+/* Right-aligned at x_right, shortened from the left when it is too wide: the end of a path is what tells two
+ * installs apart. */
+static void path_text(int y, int x_right, int size, uint32_t color, const char *p) {
+    const int maxw = x_right - 470;  /* the label column ends well short of this */
+    if (text_w(size, p) > maxw) {
+        static char buf[600];
+        int n = (int)strlen(p), keep = n;  /* how much of the path survives, counted from its end */
+        while (keep > 0 && text_w(size, p + n - keep) + text_w(size, "...") > maxw) keep--;
+        snprintf(buf, sizeof buf, "...%s", p + n - keep);
+        p = buf;
+    }
+    text(x_right - text_w(size, p), y, size, color, p);
+}
+#endif
+
 static void draw_options(int sel) {
     for (int i = 0; i < CW * CH; i++) canvas[i] = C_BG;
+    glyph_track = 0;
     text_c(110, 56, C_TEXT, "Options");
-    for (int i = 0; i <= N_OPTS; i++) {
+    for (int i = 0; i < N_ROWS; i++) {
         int y = 190 + i * 56;
         uint32_t c = i == sel ? C_SEL : C_TEXT;
-        if (i == N_OPTS) { text_c(y + 20, 36, c, "Back"); break; }
+        if (i == ROW_BACK) { text_c(y + 20, 36, c, "Back"); continue; }
+#ifdef _WIN32
+        if (i == ROW_FOLDER) {
+            text(140, y, 36, c, "Game folder");
+            path_text(y, CW - 140, 36, c, rt_game_dir);
+            continue;
+        }
+        if (i == ROW_DISC) {
+            text(140, y, 36, c, "Game disc or file");
+            continue;
+        }
+#endif
         text(140, y, 36, c, opts[i].label);
         char v[64];
         snprintf(v, sizeof v, i == sel ? "< %s >" : "%s", opt_name(&opts[i]));
         text(CW - 140 - text_w(36, v), y, 36, c, v);
     }
-    text_c(690, 24, C_DIM, "Left/Right: change   B: back (saves sh3.ini)");
+    text_c(654, 24, C_DIM, "Left/Right: change   A: pick   B: back (saves sh3.ini)");
+    if (row_note) text_c(690, 24, C_DIM, row_note);
 }
 
 /* Fades the canvas in from black, or out to black, then leaves it as it was. Input meanwhile is dropped. */
@@ -512,6 +562,7 @@ static void fade(int in) {
 
 static void options(void) {
     int sel = 0;
+    row_note = NULL;
     draw_options(sel);
     fade(1);
     for (int dirty = 0;; ) {
@@ -521,14 +572,36 @@ static void options(void) {
         if (in == IN_NONE) continue;
         dirty = 1;
         Opt *o = sel < N_OPTS ? &opts[sel] : NULL;
-        if (in != IN_BACK) sound(!o && in == IN_OK ? SND_OK : SND_CURSOR);
-        if (in == IN_UP) sel = (sel + N_OPTS) % (N_OPTS + 1);
-        if (in == IN_DOWN) sel = (sel + 1) % (N_OPTS + 1);
+        int back = sel == ROW_BACK;
+        if (in != IN_BACK) sound(back && in == IN_OK ? SND_OK : SND_CURSOR);
+        if (in == IN_UP) sel = (sel + N_ROWS - 1) % N_ROWS;
+        if (in == IN_DOWN) sel = (sel + 1) % N_ROWS;
         if (o && (in == IN_LEFT || in == IN_RIGHT || in == IN_OK)) {
             int n = n_vals(o);
             o->cur = o->cur < 0 ? 0 : (o->cur + (in == IN_LEFT ? n - 1 : 1)) % n;
         }
-        if (in == IN_BACK || (!o && in == IN_OK)) {
+#ifdef _WIN32
+        /* Both rows pick, then share the rest: rt_game_path decides what the path is and owns the wording for
+         * everything that is not the game, and nothing here changes when it refuses. */
+        if ((sel == ROW_FOLDER || sel == ROW_DISC) && (in == IN_LEFT || in == IN_RIGHT || in == IN_OK)) {
+            char picked[700], dir[700];
+            int got = sel == ROW_FOLDER ? rt_pick_game_folder(rt_game_dir, picked, sizeof picked)
+                                        : rt_pick_game_disc(rt_game_dir, picked, sizeof picked);
+            const char *why = got ? rt_game_path(picked, dir, sizeof dir) : NULL;
+            if (got && why) rt_say(why);
+            else if (got) {
+                ini_save();  /* what was changed here belongs to the folder the port is leaving */
+                if (rt_set_game_dir(dir)) {
+                    ini_load();      /* the new folder's sh3.ini */
+                    mods_init();     /* and its mods/ */
+                    sound_reload();  /* and its sd.afs */
+                    row_note = "Game location changed";
+                } else
+                    row_note = "That folder can no longer be entered";
+            }
+        }
+#endif
+        if (in == IN_BACK || (back && in == IN_OK)) {
             ini_save();
             fade(0);
             return;

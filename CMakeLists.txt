@@ -39,7 +39,7 @@ elseif(WIN32)
   # rt.h defines WINAPI as its bridge macro, and windows.h defines it as __stdcall: the last one wins, on purpose.
   target_compile_options(sh3 PRIVATE -Wno-macro-redefined)
   target_link_libraries(sh3 PRIVATE SDL2::SDL2 m user32 gdi32 winmm imm32 ole32 oleaut32 version uuid advapi32
-                        setupapi shell32 dinput8)
+                        setupapi shell32 comdlg32 dinput8)
 else()
   # GL is loaded at run time through SDL (src/d3d8/gl.c), so nothing links libGL.
   find_package(SDL2 REQUIRED)

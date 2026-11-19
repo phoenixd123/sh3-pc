@@ -7,6 +7,17 @@
   straight to the launcher. A path argument, `SH3_DIR` and "drop the executable in the game folder" still work, a
   folder that is not the game is refused with a message, and an `sh3.exe` of the wrong size is logged instead of
   crashing silently.
+- **Options > Game folder, and a disc.** The launcher's Options screen shows the folder the game runs from. Its
+  **Game folder** row picks another one with the Windows folder dialog, and a **Game disc or file** row opens the
+  real open-file dialog for the game's own `sh3.exe` or a disc image (`.iso`, `.bin`, `.cue`). Whichever row is
+  used, the path is resolved exactly as on the command line, saved in `sh3-pc.ini`, and `sh3.ini`, `mods/` and the
+  menu sounds are reloaded from it without a restart. A path that is not the game is refused with the same message
+  as at startup, and nothing changes.
+- **Any path works, and a disc is named.** The path given to the launcher can be the game's folder, its own
+  `sh3.exe`, or a disc. A disc is read as ISO 9660 (2048-byte `.iso` or a 2352-byte `.bin` rip, with or without a
+  `.cue`): a `SYSTEM.CNF` boot record makes it the PlayStation 2 game, so the message says so and names the program
+  it starts, and `sh3.exe`/`setup.exe` at the root makes it a PC installation disc. An ELF is read as far as its
+  MIPS header. Nothing is guessed from the file extension, and nothing pretends the PS2 release can run here.
 - **The credits are a credit roll**, not a card: letterspaced capitals, the names under the labels, scrolling out of
   and back into black in about 26 seconds, skippable with A.
 - **F12** writes the presented frame to `screenshots/sh3-<date>-<time>.png`, at the game's resolution.
