@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.1 — the launcher as a download, and a picker that takes files
+
+- **Download the launcher.** The Windows launcher is attached to this release as a zip (`sh3-pc-launcher.exe`,
+  `SDL2.dll`, `README.txt`), so it runs without a build. It is the launcher only: the recompiled game code is
+  generated from the player's own `sh3.exe` and is not distributed here, and Play stops at the crash handler until
+  that build exists ([docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md)).
+- **Options picks a disc or a single file for real.** The previous try asked the shell's folder browser to show
+  files (`BIF_BROWSEINCLUDEFILES`), which lists them but gives no dependable way to return one. **Game folder** is
+  the plain folder browser again, and a new **Game disc or file** row opens the standard Windows open-file dialog
+  for `sh3.exe` or a `.iso`/`.bin`/`.cue`/`.img` disc. Both rows resolve the path the same way the command line
+  does, save it in `sh3-pc.ini` and reload `sh3.ini`, `mods/` and the menu sounds; a path that is not the game is
+  refused with the same message and nothing changes.
+
 ## 1.1.0 — a launcher that finds the game, a real credit roll, F12 screenshots
 
 - **The port asks for the game.** Started without an argument it opens the Windows folder picker, checks that

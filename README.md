@@ -8,12 +8,16 @@
 </div>
 <h1 align=center>Silent Hill 3 — PC (and Switch)</h1>
 
-<p align=center><b>1.1.0</b> — ported to PC by <b>phoenixd123</b></p>
+<p align=center><b>1.1.1</b> — ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
 compiled for the host. The Windows layer the game expects (Direct3D 8, DirectSound, DirectInput, kernel32...) is
 reimplemented on top of SDL2 and OpenGL.
+
+<p align=center><b><a href="https://github.com/phoenixd123/sh3-pc/releases/latest">Download the Windows launcher</a></b>
+(no build needed). It is the launcher only: the game's code is recompiled from your own <code>sh3.exe</code>, so the full
+game is built from your copy, not downloaded — see <a href="docs/BUILD-WINDOWS.md">docs/BUILD-WINDOWS.md</a>.</p>
 
 This is a separate project that started from [sh3-nx](https://github.com/cutarev/sh3-nx) by cutarev, whose work is
 most of what makes the game run at all: **who did what is in [CREDITS.md](CREDITS.md)**, and the state of every
