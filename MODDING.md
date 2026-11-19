@@ -8,6 +8,24 @@ to `sh3.exe`, and nothing in it comes from this repository.
 > it is made from *your* copy, for *your* copy, and is not something to redistribute. `tools/make_hd_pack.py`
 > exists to build one from your install.
 
+## Installing a mod from the launcher
+
+Options > **Install a mod** asks for a `.zip`, unpacks it into `mods/<archive name>/` and loads it: no restart and no
+unpacking by hand. Dropping a `.zip` on the port does the same and starts the game.
+
+What the archive holds decides its shape, so a mod packaged any of the usual ways works as it is:
+
+| In the archive | Becomes |
+| --- | --- |
+| `files/...` or `mod.ini` at the top | `mods/<name>/` as it stands |
+| everything inside one folder, `MyMod/files/...` | `mods/<name>/files/...` |
+| loose game paths, `data/tex/...` | `mods/<name>/files/data/tex/...` |
+
+Refused, with the reason on screen: a file that is not an archive, an archive with nothing in it, a path that would
+land outside the game folder, and a name that is already taken. Stored and deflated entries are read; anything else
+has to be repacked as a normal zip. A mod installed this way is enabled like any other, so `mod.ini` and
+`load_order.txt` below change it from then on.
+
 ## Where mods live
 
 ```text

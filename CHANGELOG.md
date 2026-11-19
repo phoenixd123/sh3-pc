@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 — mods, installed from the launcher
+
+- **Install a mod, from the game.** Options has an **Install a mod** row that asks for a `.zip`, unpacks it into
+  `mods/<archive name>/` and loads it straight away; dropping the archive on the executable does the same and starts
+  the game. The archive's layout is worked out from what is inside: a `files/` folder or `mod.ini` as it stands, a
+  single wrapper folder stripped, and loose game paths (`data/...`) wrapped in `files/`.
+- **A ZIP reader in the port**, so none of this needs an unzip tool, a shell or a network: stored and deflated
+  entries, and a refusal with the reason for a file that is not an archive, an archive with nothing in it, a path
+  that would land outside the game folder, and a mod name that is already taken.
+- **The credits roll names only this port's author.** The recompilation it stands on is credited in
+  [CREDITS.md](CREDITS.md), which is where the licences require it.
+
 ## 1.1.1 — the launcher as a download, and a picker that takes files
 
 - **Download the launcher.** The Windows launcher is attached to this release as a zip (`sh3-pc-launcher.exe`,

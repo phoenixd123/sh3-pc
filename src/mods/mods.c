@@ -5,6 +5,7 @@
 #include "../runtime/rt.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
+#include "zip.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -188,4 +189,174 @@ void mods_dump_texture(uint64_t key, uint32_t w, uint32_t h, uint32_t fmt, const
 
 int mods_write_png(const char *path, int w, int h, int comp, const void *px) {
     return stbi_write_png(path, w, h, comp, px, comp * w);
+}
+
+/* ---- installing an archive --------------------------------------------------------------------------
+ * The launcher unpacks a mod archive into mods/<name>/, the name taken from the archive's own file name. What the
+ * archive holds decides its shape: a folder with files/ or mod.ini is a mod as it stands, and anything else - a
+ * zip of data/..., or of one folder - is wrapped in files/, which is the path the game reads its own data through. */
+
+static const char *base_name(const char *p) {
+    const char *b = p;
+    for (const char *s = p; *s; s++)
+        if (*s == '/' || *s == '\\') b = s + 1;
+    return b;
+}
+
+static int rm_tree(const char *path) {
+    stat_t st;
+    if (path && *path && stat(path, &st)) return 0;
+    if (!S_ISDIR(st.st_mode)) return unlink(path) == 0;
+    DIR *d = opendir(path);
+    if (d) {
+        struct dirent *e;
+        while ((e = readdir(d))) {
+            if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+            char child[600];
+            snprintf(child, sizeof child, "%s/%s", path, e->d_name);
+            rm_tree(child);
+        }
+        closedir(d);
+    }
+    return rmdir(path) == 0;
+}
+
+/* The one thing in `path` when it is the only thing and a folder, with its full path in out: an archive that wraps
+ * everything in "MyMod/" names the mod itself. */
+static int sole_dir(const char *path, char *out, size_t n) {
+    DIR *d = opendir(path);
+    char name[260] = "";
+    int count = 0;
+    if (d) {
+        struct dirent *e;
+        while ((e = readdir(d))) {
+            if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+            snprintf(name, sizeof name, "%s", e->d_name);
+            count++;
+        }
+        closedir(d);
+    }
+    if (count != 1) return 0;
+    snprintf(out, n, "%s/%s", path, name);
+    return is_dir(out);
+}
+
+/* The archive's name without its folder and extension, made into a folder name. */
+static void mod_name_from(const char *zip, char *out, size_t n) {
+    const char *b = base_name(zip), *dot = strrchr(b, '.');
+    size_t len = dot && dot > b ? (size_t)(dot - b) : strlen(b), k = 0;
+    for (size_t i = 0; i < len && k + 1 < n; i++) {
+        unsigned char c = (unsigned char)b[i];
+        int ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+                 c == '.' || c == ' ';
+        out[k++] = ok ? (char)c : '_';
+    }
+    while (k && out[k - 1] == ' ') k--;
+    out[k] = 0;
+    if (!k) snprintf(out, n, "mod");
+}
+
+int mods_install(const char *zip, char *name, size_t nn, char *err, size_t er) {
+    const char *stage = "mods/.install";
+    char folder[128], root[600], dest[600];
+    unsigned char *data = NULL;
+    FILE *f = fopen(zip, "rb");
+    long size = 0;
+    if (f) {
+        fseek(f, 0, SEEK_END);
+        size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+    }
+    if (!f || size <= 0 || (unsigned long)size > (512ul << 20)) {
+        if (f) fclose(f);
+        snprintf(err, er, "That archive cannot be read: %s", zip);
+        return 0;
+    }
+    if (!(data = malloc((size_t)size)) || fread(data, 1, (size_t)size, f) != (size_t)size) {
+        fclose(f);
+        free(data);
+        snprintf(err, er, "That archive cannot be read: %s", zip);
+        return 0;
+    }
+    fclose(f);
+
+    mod_name_from(zip, folder, sizeof folder);
+    rm_tree(stage);
+    mkdir("mods", 0755);
+    if (mkdir(stage, 0755) && !is_dir(stage)) {
+        free(data);
+        snprintf(err, er, "The launcher cannot write to mods/ in this game folder.");
+        return 0;
+    }
+    int files = zip_extract(data, (size_t)size, stage, err, er);
+    free(data);
+    if (files <= 0) {
+        rm_tree(stage);
+        return 0;
+    }
+
+    /* Where the mod starts. A folder holding files/ or mod.ini is a mod as it stands; an archive that wraps
+     * everything in one folder (MyMod/) is the mod as well; and loose data/..., which is a zip of the game's own
+     * paths, is wrapped in files/, the path the game reads its data through. */
+    snprintf(root, sizeof root, "%s", stage);
+    char sole[600], probe[700];
+    if (sole_dir(stage, sole, sizeof sole)) {
+        snprintf(probe, sizeof probe, "%s/files", sole);
+        int has = is_dir(probe);
+        snprintf(probe, sizeof probe, "%s/mod.ini", sole);
+        has = has || is_file(probe);
+        const char *base = base_name(sole);
+        if (has || (strcasecmp(base, "data") && strcasecmp(base, "files"))) snprintf(root, sizeof root, "%s", sole);
+    }
+
+    char filesdir[700], ini[700];
+    snprintf(filesdir, sizeof filesdir, "%s/files", root);
+    snprintf(ini, sizeof ini, "%s/mod.ini", root);
+    if (!is_dir(filesdir) && !is_file(ini)) {
+        /* Loose files: they are what the game reads over its own data/, so they go under files/. */
+        char inner[700], names[64][260];
+        int count = 0;
+        snprintf(inner, sizeof inner, "%s/files", root);
+        if (mkdir(inner, 0755) && !is_dir(inner)) {
+            rm_tree(stage);
+            snprintf(err, er, "The launcher cannot write to mods/ in this game folder.");
+            return 0;
+        }
+        DIR *d = opendir(root);
+        if (d) {
+            struct dirent *e;
+            while ((e = readdir(d)) && count < 64) {
+                if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") || !strcmp(e->d_name, "files")) continue;
+                snprintf(names[count++], sizeof names[0], "%s", e->d_name);
+            }
+            closedir(d);
+        }
+        for (int i = 0; i < count; i++) {
+            char from[700], to[700];
+            snprintf(from, sizeof from, "%s/%s", root, names[i]);
+            snprintf(to, sizeof to, "%s/%s", inner, names[i]);
+            if (rename(from, to)) {
+                rm_tree(stage);
+                snprintf(err, er, "The launcher cannot move the mod's files into place.");
+                return 0;
+            }
+        }
+    }
+
+    snprintf(dest, sizeof dest, "mods/%s", folder);
+    if (is_dir(dest) || is_file(dest)) {
+        rm_tree(stage);
+        snprintf(err, er, "There is already a mod called \"%s\".\n\nDelete mods/%s first, or rename the archive.",
+                 folder, folder);
+        return 0;
+    }
+    if (rename(root, dest)) {
+        rm_tree(stage);
+        snprintf(err, er, "The launcher cannot put the mod in mods/%s.", folder);
+        return 0;
+    }
+    if (strcmp(root, stage)) rm_tree(stage);  /* the staging folder, now empty */
+    snprintf(name, nn, "%s", folder);
+    rt_log("mods: installed \"%s\" from %s", folder, base_name(zip));
+    return 1;
 }

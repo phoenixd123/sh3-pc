@@ -97,6 +97,9 @@ from the ground up. Point the launcher at a PS2 image and it says exactly that, 
 - **Launcher**: it asks for the game folder once and remembers it, then Play and Options before the game; Options changes the resolution and the game threads in `sh3.ini`
   on the console, and on Windows its **Game folder** and **Game disc or file** rows point the port at another
   install: the folder browser takes the install folder, the open-file dialog takes `sh3.exe` or a disc image.
+- **Mods in one click**: Options > **Install a mod** takes a `.zip`, unpacks it into `mods/` under the game folder
+  and loads it without a restart; dropping the archive on the executable installs it and starts the game. The layout
+  is worked out from the archive itself: a `files/` folder, a wrapper folder, or loose `data/...`.
 - **Widescreen**: 16:9 at 1280x720 by default, 1920x1080 for docked play, or the original 4:3
   (ThirteenAG's WidescreenFix, ported). The camera widens in gameplay, cutscenes keep their framing without the
   letterbox, and menus and HUD stay in a centered 4:3 area.

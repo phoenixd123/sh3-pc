@@ -223,7 +223,8 @@ static Opt opts[] = {
 #ifdef _WIN32
 #define ROW_FOLDER N_OPTS
 #define ROW_DISC (N_OPTS + 1)
-#define ROW_BACK (N_OPTS + 2)
+#define ROW_MOD (N_OPTS + 2)
+#define ROW_BACK (N_OPTS + 3)
 #else
 #define ROW_BACK N_OPTS
 #endif
@@ -385,9 +386,6 @@ static const Credit credit_roll[] = {
     {CR_LABEL, "ORIGINAL GAME"},
     {CR_VALUE, "Konami / Team Silent"},
     {CR_GAP, NULL},
-    {CR_LABEL, "RECOMPILATION"},
-    {CR_VALUE, "sh3-nx - cutarev"},
-    {CR_VALUE, "xboxrecomp - sp00nznet"},
     {CR_GAP, NULL},
     {CR_LABEL, "EVERYTHING ELSE"},
     {CR_VALUE, "CREDITS.md"},
@@ -534,6 +532,10 @@ static void draw_options(int sel) {
             text(140, y, 36, c, "Game disc or file");
             continue;
         }
+        if (i == ROW_MOD) {
+            text(140, y, 36, c, "Install a mod");
+            continue;
+        }
 #endif
         text(140, y, 36, c, opts[i].label);
         char v[64];
@@ -598,6 +600,22 @@ static void options(void) {
                     row_note = "Game location changed";
                 } else
                     row_note = "That folder can no longer be entered";
+            }
+        }
+#endif
+#ifdef _WIN32
+        /* A mod archive: unpacked into mods/ under the game folder, then loaded, so it is applied without a restart
+         * of the port and without unpacking anything by hand. */
+        if (sel == ROW_MOD && (in == IN_LEFT || in == IN_RIGHT || in == IN_OK)) {
+            char zip[700], name[128], err[600] = "";
+            if (rt_pick_mod_zip(zip, sizeof zip)) {
+                if (mods_install(zip, name, sizeof name, err, sizeof err)) {
+                    static char note[160];
+                    mods_init();  /* and it is live for the game that starts after this menu */
+                    snprintf(note, sizeof note, "Installed the mod \"%s\"", name);
+                    row_note = note;
+                } else
+                    rt_say(err);
             }
         }
 #endif
