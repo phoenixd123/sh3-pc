@@ -84,13 +84,16 @@ there is no process to hook and no 32-bit address space to patch.
 1. The converted models. They are ordinary PC `.mdl` files written into patched copies of `data/chrpl.arc` and
    `data/arc.arc` by the mod's own tool, made from the player's PS2 copy: its NOTICE forbids redistributing them,
    so they cannot be bundled here either. `mods/<name>/files/` already serves any file the game opens for reading,
-   archives included, so that half is a `mods/` folder and no code at all.
+   archives included, so that half is a `mods/` folder and no code at all; `tools/ps2_outfits.py` builds it in one command.
 2. The executable-side tables, re-expressed as a build-time patch: the fourteen model-path pointers, the
    twelve-entry password table and the count that walks it, and the costume inventory table. `tools/regen.sh`
    already patches the image before lifting it (the widescreen fix lives there), so this belongs in that stage —
-   as data edits, not the mod's runtime code cave.
+   as data edits, not the mod's runtime code cave; `patches/*.patch` is that stage, applied by
+   `tools/patch_image.py` with every edit checked against the original bytes.
 3. The game running. The mod's own documentation calls the models prototypes and says outfit rendering still needs
    a stability pass, so a blind table patch could not be called done.
 
 Not attempted here because there are no game files: a table patch that is never loaded against real archives is a
-guess, and the assets cannot be shipped.
+guess, and the assets cannot be shipped. The local pipeline is in place instead: `tools/ps2_outfits.py` builds the
+archive mod from models the player converts, and `patches/*.patch` carries the table edits into the build (see
+"PS2-exclusive costumes" in `MODDING.md`).

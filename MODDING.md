@@ -119,6 +119,62 @@ smearing at grazing angles; a texture with a single level samples exactly as bef
   wrong one for anything generated, so packs should target static art.
 - **P8 textures** need one PNG per palette appearance, as described above.
 
+## PS2-exclusive costumes, from your own copy
+
+The PlayStation 2 release has fourteen promo costumes the PC release never shipped. None of them are here, and
+none can be: the models are Konami's, so they have to come from your own copy. What is here is the tooling, so
+the job is one command on your machine, plus a table patch to make them selectable.
+
+### 1. Convert the models
+
+Each costume is a pair of ordinary PC `.mdl` files, `<name>_pc_prototype.mdl` (Heather) and
+`<name>_pc_chhaa_prototype.mdl` (the alternate model), converted from your own PS2 disc. This repository does
+not convert PS2 models; use a converter you trust, or models you already made.
+
+### 2. Build the archives into a mod
+
+```sh
+python tools/ps2_outfits.py --game "C:\Games\Silent Hill 3" --models C:\converted --zip
+```
+
+That reads `data/chrpl.arc` and `data/arc.arc` from your installation, appends the models to copies, and
+writes `<game>/mods/ps2-outfit-models/` (`mod.ini`, `files/data/chrpl.arc`, `files/data/arc.arc`). Only that
+folder is written; the game's own files are untouched. `--zip` also writes `ps2-outfit-models.zip` beside it,
+which **Options > Install a mod** installs like any other archive. `--out` puts the mod somewhere else. The port already serves game files out of `files/`, archives included, so enabling the mod
+is enough for the models to load.
+
+The tool checks both archive signatures, refuses compressed or damaged entries, refuses a path that is already
+in the catalog, and writes nothing outside the mod folder.
+
+### 3. Point the outfit tables at them
+
+The models are in the archive now, but the PC executable's tables do not reference them: there are fourteen
+unused player-model resource slots, and no password entries for the PS2 costumes. That data is in `sh3.exe`,
+not in code the port can change from `src/game`, so it is edited before recompilation by a patch file:
+
+```sh
+python tools/patch_image.py "C:\Games\Silent Hill 3\sh3.exe" --check patches\my-outfits.patch
+```
+
+`tools/regen.sh` applies every `patches/*.patch` on the next build. `patches/README.md` has the file format.
+The addresses, from the supported PC executable (image base `0x400000`):
+
+| What | Where | Shape |
+| --- | --- | --- |
+| Player-model resource pointers | RVA `0x310C90` | 318 `u32` path pointers; slot 1 is `data/pcchr/pl/chhaa.mdl`, which confirms the executable |
+| Costume inventory table | VA `0x71E02C` | 12 `u16` entries |
+| Password map | VA `0x71E1B4` | `u16` costume ID and `u16` message ID per entry, 12 vanilla entries |
+| Password hashes | VA `0x71E1E8` | 16 bytes per entry, same order as the map |
+| Password count | RVA `0x1D809B` | the instruction that reads the entry count |
+
+Filling a slot is a `u32` pointing at the model's path: the string can go in a run of zero bytes with
+`string`, and the pointer with `replace`. The inventory table is what lists a costume in **Extra Costume**,
+and the password table is what unlocks it, so all three have to agree. Do this step with the game running:
+`patch_image.py` only checks that a patch lands on the bytes it expects, not that the table it builds is right.
+
+This last step is documented rather than automated. Without your converted models and a build to run them
+against, a generated table patch would be a guess.
+
 ## Writing other kinds of mods
 
 `files/` is the general mechanism, so anything the game reads can be swapped. What it reads and when is what
