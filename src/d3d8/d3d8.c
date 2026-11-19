@@ -1,5 +1,6 @@
 /* IDirect3D8 and IDirect3DDevice8 on OpenGL. */
 #include "d3d8.h"
+#include "freecam.h"
 #include "../mods/mods.h"
 #include <math.h>
 #include <time.h>
@@ -338,6 +339,7 @@ static void screenshot(Res *bb) {
 }
 
 METHOD(dev_Present, 5) {
+    rt_clock_present();
     int ww, wh;
     SDL_GL_GetDrawableSize(rt_window, &ww, &wh);
     Res *bb = res_of(dev->backbuffer);
@@ -395,6 +397,8 @@ METHOD(dev_Present, 5) {
         rt_log("%s", line);
     }
     rt_pump_events();
+    freecam_frame();
+    if (freecam_active()) freecam_view(dev->view, dev->view);  /* the game may not set the view while frozen */
     res_bind_targets();
     return 0;
 }
@@ -476,7 +480,12 @@ static float *transform_slot(uint32_t t) {
 }
 METHOD(dev_SetTransform, 3) {
     float *m = transform_slot(ARG(1));
-    if (m) { memcpy(m, GPTR(ARG(2)), 64); MARK(xf[transform_id(ARG(1))]); }
+    if (m) {
+        const float *src = GPTR(ARG(2));
+        if (ARG(1) == 2 && freecam_active()) freecam_view(src, m);  /* D3DTS_VIEW */
+        else memcpy(m, src, 64);
+        MARK(xf[transform_id(ARG(1))]);
+    }
     return 0;
 }
 METHOD(dev_GetTransform, 3) {
@@ -488,6 +497,7 @@ METHOD(dev_MultiplyTransform, 3) {
     float *m = transform_slot(ARG(1)), r[16];
     const float *b = GPTR(ARG(2));
     if (!m) return 0;
+    if (ARG(1) == 2 && freecam_active()) return 0;  /* the freecam's view is not multiplied into */
     for (int i = 0; i < 4; i++)
         for (int j = 0; j < 4; j++)
             r[i * 4 + j] = m[i * 4] * b[j] + m[i * 4 + 1] * b[4 + j] + m[i * 4 + 2] * b[8 + j] + m[i * 4 + 3] * b[12 + j];

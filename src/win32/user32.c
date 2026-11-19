@@ -1,5 +1,6 @@
 /* USER32, GDI32, ADVAPI32, OLE32: one SDL window and a minimal message loop. */
 #include "../runtime/rt.h"
+#include "../d3d8/freecam.h"
 #include <SDL2/SDL.h>
 #include <ctype.h>
 
@@ -70,7 +71,15 @@ void rt_pump_events(void) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) { rt_log("window closed"); quit_posted = 1; }
-        else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F12) rt_shot_request = 1;
+        else if (e.type == SDL_KEYDOWN) {
+            if (e.key.keysym.sym == SDLK_F12) rt_shot_request = 1;
+            else if (e.key.repeat) {}
+            else if (e.key.keysym.sym == SDLK_F1) freecam_toggle();
+            else if (e.key.keysym.sym == SDLK_COMMA) freecam_step(-1);
+            else if (e.key.keysym.sym == SDLK_PERIOD) freecam_step(1);
+            else if (e.key.keysym.sym == SDLK_LEFTBRACKET) freecam_step(-10);
+            else if (e.key.keysym.sym == SDLK_RIGHTBRACKET) freecam_step(10);
+        } else if (e.type == SDL_MOUSEWHEEL) freecam_wheel(e.wheel.y);
     }
 }
 
