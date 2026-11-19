@@ -67,3 +67,30 @@ and `tools/observed_seeds.txt` are how those become part of the next `tools/rege
 Saves, `savedata/key.ini` and the shader cache live next to the executable, as before. A `key.ini` written by an
 older build keeps its old button layout (delete it for the current defaults), and there is no save migration:
 the file format is the game's own.
+
+### 6. The PS2-exclusive outfits are not available (issue #1)
+
+The PlayStation 2 release has fourteen magazine-promo costumes the PC release never shipped: no models for them in
+`chrpl.arc`, and no entries in the executable's outfit tables.
+
+[A mod that ports them exists](https://github.com/amiraliuks/silent-hill-3-enhanced), and it is not something this
+port can load: it ships as a 32-bit ASI DLL that patches the original `sh3.exe` in memory (MinHook detours on RVAs
+of the `0x400000` image: the player-model pointer table at `0x310C90`, the password lookup at `0x1D7F90`, the
+costume inventory table at `0x71E02C`). This port never runs that executable — it recompiles it to native C — so
+there is no process to hook and no 32-bit address space to patch.
+
+**What a fix needs, in order:**
+
+1. The converted models. They are ordinary PC `.mdl` files written into patched copies of `data/chrpl.arc` and
+   `data/arc.arc` by the mod's own tool, made from the player's PS2 copy: its NOTICE forbids redistributing them,
+   so they cannot be bundled here either. `mods/<name>/files/` already serves any file the game opens for reading,
+   archives included, so that half is a `mods/` folder and no code at all.
+2. The executable-side tables, re-expressed as a build-time patch: the fourteen model-path pointers, the
+   twelve-entry password table and the count that walks it, and the costume inventory table. `tools/regen.sh`
+   already patches the image before lifting it (the widescreen fix lives there), so this belongs in that stage —
+   as data edits, not the mod's runtime code cave.
+3. The game running. The mod's own documentation calls the models prototypes and says outfit rendering still needs
+   a stability pass, so a blind table patch could not be called done.
+
+Not attempted here because there are no game files: a table patch that is never loaded against real archives is a
+guess, and the assets cannot be shipped.

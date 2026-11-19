@@ -182,7 +182,7 @@ int win_pick_path(const char *title, const char *start, char *out, size_t n) {
     return ok;
 }
 
-int win_pick_file(const char *title, const char *start, char *out, size_t n) {
+int win_pick_file(const char *title, const char *start, const char *filter, char *out, size_t n) {
     OPENFILENAMEA ofn;
     if (!n) return 0;
     out[0] = 0;
@@ -191,7 +191,7 @@ int win_pick_file(const char *title, const char *start, char *out, size_t n) {
     ofn.lpstrTitle = title;
     ofn.lpstrFile = out;
     ofn.nMaxFile = (DWORD)n;
-    ofn.lpstrFilter = "Silent Hill 3 or its disc\0sh3.exe;*.iso;*.bin;*.cue;*.img\0All files\0*.*\0";
+    ofn.lpstrFilter = filter ? filter : "All files\0*.*\0";
     ofn.nFilterIndex = 1;
     ofn.lpstrInitialDir = start && *start ? start : NULL;
     /* NOCHANGEDIR: sh3.ini, data/ and mods/ are relative, so the dialog must not move the port's working folder. */

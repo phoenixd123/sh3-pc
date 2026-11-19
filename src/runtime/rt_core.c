@@ -849,6 +849,12 @@ static const char *absolute_dir(const char *dir, char *out, size_t n) {
 #endif
 }
 
+/* A .zip dropped on the port, or given as its argument: a mod to install, not a game path. */
+static int zip_arg(const char *p) {
+    size_t n = strlen(p);
+    return n > 4 && !strcasecmp(p + n - 4, ".zip") && is_file(p);
+}
+
 /* The launcher's "Game location" rows: checks the folder, moves the port into it and remembers it. The launcher runs
  * before anything of the game is loaded, so that is the whole of the change; it reloads sh3.ini, mods/ and the
  * menu sounds itself. */
@@ -866,8 +872,15 @@ int rt_pick_game_folder(const char *start, char *out, size_t n) {
     return win_pick_path("Where is Silent Hill 3? Pick the folder that holds sh3.exe and data/", start, out, n);
 }
 
+#define GAME_FILTER "Silent Hill 3 or its disc\0sh3.exe;*.iso;*.bin;*.cue;*.img\0All files\0*.*\0"
+#define MOD_FILTER "Mod archive\0*.zip\0All files\0*.*\0"
+
 int rt_pick_game_disc(const char *start, char *out, size_t n) {
-    return win_pick_file("Where is Silent Hill 3? Pick sh3.exe or the disc", start, out, n);
+    return win_pick_file("Where is Silent Hill 3? Pick sh3.exe or the disc", start, GAME_FILTER, out, n);
+}
+
+int rt_pick_mod_zip(char *out, size_t n) {
+    return win_pick_file("Install a mod: pick its .zip", rt_game_dir, MOD_FILTER, out, n);
 }
 #endif
 
@@ -886,6 +899,23 @@ int main(int argc, char **argv) {
      * dropped file or a script passes, and quietly using another folder would hide the mistake. A path can be the
      * game's folder, the game's own sh3.exe, or a disc, which is read far enough to be named. */
     const char *given = argc > 1 && argv[1][0] ? argv[1] : getenv("SH3_DIR");
+    /* A mod archive dropped on the port: install it into the game the port already knows and start that game, which
+     * is what dropping it is for. It never becomes the game path. */
+    if (given && zip_arg(given)) {
+        char zpath[700], target[700], name[128], err[600] = "";
+        const char *zip = absolute_dir(given, zpath, sizeof zpath);
+        given = NULL;  /* a mod archive is never the game path */
+        if (!saved_game(target, sizeof target) || !game_folder(target)) {
+            rt_say("That is a mod archive, and there is no game folder to install it into.\n\nStart the game once, "
+                   "then drop the archive on the port again.");
+            return 1;
+        }
+        if (chdir(target) || !mods_install(zip, name, sizeof name, err, sizeof err)) {
+            rt_say(err[0] ? err : "That archive could not be installed.");
+            return 1;
+        }
+        rt_log("launcher: installed the mod \"%s\"; starting the game", name);
+    }
     if (given) {
         const char *why = rt_game_path(given, dir, sizeof dir);
         if (why) {

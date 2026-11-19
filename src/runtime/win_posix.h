@@ -99,10 +99,11 @@ static inline struct tm *gmtime_r(const time_t *t, struct tm *out) { return gmti
 static inline struct tm *localtime_r(const time_t *t, struct tm *out) { return localtime_s(out, t) == 0 ? out : NULL; }
 
 /* ---- the launcher's pickers and message box (win_posix.c) ---- */
-/* The shell's folder dialog, and the open-file dialog for sh3.exe or a disc. Both open at `start` when it is set and
- * return 1 with the path; 0 when the player closed them. */
+/* The shell's folder dialog, and the open-file dialog for a file or a disc. Both open at `start` when it is set and
+ * return 1 with the path; 0 when the player closed them. `filter` is a Win32 filter string (pairs of description and
+ * pattern, ending in two NULs) or NULL for "all files". */
 int win_pick_path(const char *title, const char *start, char *out, size_t n);
-int win_pick_file(const char *title, const char *start, char *out, size_t n);
+int win_pick_file(const char *title, const char *start, const char *filter, char *out, size_t n);
 void win_message(const char *title, const char *text);
 
 #endif /* _WIN32 */

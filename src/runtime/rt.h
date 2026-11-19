@@ -58,9 +58,11 @@ const char *rt_game_path(const char *path, char *dir, size_t n);
 int rt_set_game_dir(const char *dir);  /* 1 when the port now runs from that folder */
 void rt_say(const char *text);         /* the log, and a message box when there is one */
 #ifdef _WIN32
-/* The Options rows' pickers: the folder dialog for the install, the open-file dialog for sh3.exe or a disc. */
+/* The Options rows' pickers: the folder dialog for the install, the open-file dialogs for sh3.exe or a disc and
+ * for a mod archive. */
 int rt_pick_game_folder(const char *start, char *out, size_t n);
 int rt_pick_game_disc(const char *start, char *out, size_t n);
+int rt_pick_mod_zip(char *out, size_t n);
 #endif
 extern int rt_hd_textures;            /* hd= in sh3.ini: mods' texture packs replace the game's textures */
 extern int rt_aniso;                  /* aniso= in sh3.ini: anisotropic filtering, 1 = off */

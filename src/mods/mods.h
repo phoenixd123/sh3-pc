@@ -25,6 +25,12 @@ const char *mods_override(const char *game_path, char *out, size_t n);
 unsigned char *mods_hd_texture(uint64_t key, int *w, int *h);
 int mods_hd_enabled(void);   /* hd= in sh3.ini and at least one mod */
 
+/* Installs a mod archive (zip) as mods/<name>/, the name taken from the file's own: unpacked into a staging folder,
+ * its shape worked out (files/ or mod.ini as it stands, anything else wrapped in files/), then moved into place.
+ * Refuses an archive that is not a zip, one with nothing in it, and a name that is already taken. Call mods_init()
+ * afterwards to load it. 1 with the folder name in `name`, or 0 with a sentence in `err`. */
+int mods_install(const char *zip_path, char *name, size_t n, char *err, size_t errn);
+
 /* texdump=1: writes each texture the game uploads to texdump/<key>.png, for pack authors to upscale. */
 int mods_dumping(void);
 void mods_dump_texture(uint64_t key, uint32_t w, uint32_t h, uint32_t fmt, const void *rgba);
