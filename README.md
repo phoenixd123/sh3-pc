@@ -53,8 +53,10 @@ a render of what the port might look like.
 3. **Start it.** `build/windows/sh3.exe`, with `SDL2.dll` beside it. The first launch asks for the game folder with
    the usual Windows folder picker; pick the folder that holds `sh3.exe` and `data/`, and the port checks it and
    remembers it in `sh3-pc.ini` beside its own executable, so later launches go straight to the launcher. A path
-   argument (`sh3.exe "D:/Games/Silent Hill 3"`) or `SH3_DIR` answers the question up front, and so does dropping
-   the port's executable into the game folder.
+   argument or `SH3_DIR` answers the question up front, and so does dropping the port's executable into the game
+   folder. The path can be the folder, the game's own `sh3.exe`, or a disc: a file dropped on the port is read far
+   enough to say what it is, so a PlayStation 2 image and a PC installation disc each come back named, with what to
+   do instead.
 4. **Mods are optional**: a `mods/` folder beside the game, with HD texture packs in it ([MODDING.md](MODDING.md)).
 5. **Screenshots**: **F12** in game writes `screenshots/sh3-<date>-<time>.png`.
 
@@ -82,13 +84,15 @@ different executable will crash, not run.
 
 **The PlayStation 2 release cannot be used.** It is a MIPS binary with its own data formats and no Win32 layer to
 reimplement; this port is a recompilation of the PC build, and doing the PS2 version would be a different project
-from the ground up.
+from the ground up. Point the launcher at a PS2 image and it says exactly that, naming the program the disc boots
+(`SLUS_206.22` on the NTSC disc), instead of failing silently.
 
 ## Features
 
 - **Native code**: every function of `sh3.exe` runs as native code for the machine you build it on — x86-64 on PC, ARM64 on the Switch. No emulator, no Wine.
 - **Launcher**: it asks for the game folder once and remembers it, then Play and Options before the game; Options changes the resolution and the game threads in `sh3.ini`
-  on the console.
+  on the console, and on Windows its **Game folder** and **Game disc or file** rows point the port at another
+  install: the folder browser takes the install folder, the open-file dialog takes `sh3.exe` or a disc image.
 - **Widescreen**: 16:9 at 1280x720 by default, 1920x1080 for docked play, or the original 4:3
   (ThirteenAG's WidescreenFix, ported). The camera widens in gameplay, cutscenes keep their framing without the
   letterbox, and menus and HUD stay in a centered 4:3 area.
@@ -247,7 +251,9 @@ to move and turn, Space for action, Return / Escape to confirm / cancel.
 | `texdump=1` | write every texture the game uploads to `texdump/`, for making a pack |
 
 The port keeps one file of its own beside its executable: `sh3-pc.ini`, holding `game=`, the folder the launcher
-was pointed at. In game, **F12** writes `screenshots/sh3-<date>-<time>.png` next to `sh3.exe`.
+was pointed at. **Options > Game folder** picks it again with the Windows folder dialog, starting where it is now,
+and **Options > Game disc or file** takes the game's own `sh3.exe` or a disc image through the open-file dialog;
+anything that is not the game is refused with the same words the command line uses, and nothing is written. In game, **F12** writes `screenshots/sh3-<date>-<time>.png` next to `sh3.exe`.
 
 ## Building
 

@@ -4,6 +4,7 @@
 #include <windows.h>
 #include "win_posix.h"
 #include <shlobj.h>  /* SHBrowseForFolderA: the launcher asks for the game folder with the shell's dialog */
+#include <commdlg.h>  /* GetOpenFileNameA: and for sh3.exe or a disc with the open-file dialog */
 
 /* ---- locks ----
  * Created on first use, so a static PTHREAD_MUTEX_INITIALIZER (all zeroes) is still valid. The slot is
@@ -146,17 +147,18 @@ int closedir(DIR *dir) {
     return 0;
 }
 
-/* ---- the launcher's folder picker ----
- * The port asks for the game folder with the shell's own dialog: it is the picker every Windows program uses, it
- * handles network paths and long names, and it needs no GL context or SDL window. The folder the port used last
- * is selected when the dialog opens. */
+/* ---- the launcher's pickers ----
+ * Two dialogs, each doing the one job it is built for. The shell's folder browser has no dependable way to return a
+ * file (BIF_BROWSEINCLUDEFILES shows them, but which item is returned is the shell's business), so a file or a disc
+ * goes through the real open-file dialog instead. Neither guesses from an extension: whatever comes back is read by
+ * rt_core's resolver. The folder the port used last is where both dialogs open. */
 static int CALLBACK pick_init(HWND h, UINT msg, LPARAM lp, LPARAM data) {
     (void)lp;
     if (msg == BFFM_INITIALIZED && data) SendMessageA(h, BFFM_SETSELECTIONA, TRUE, data);
     return 0;
 }
 
-int win_pick_folder(const char *title, const char *start, char *out, size_t n) {
+int win_pick_path(const char *title, const char *start, char *out, size_t n) {
     char shown[MAX_PATH] = "";
     BROWSEINFOA bi;
     memset(&bi, 0, sizeof bi);
@@ -178,6 +180,23 @@ int win_pick_folder(const char *title, const char *start, char *out, size_t n) {
     }
     CoUninitialize();
     return ok;
+}
+
+int win_pick_file(const char *title, const char *start, char *out, size_t n) {
+    OPENFILENAMEA ofn;
+    if (!n) return 0;
+    out[0] = 0;
+    memset(&ofn, 0, sizeof ofn);
+    ofn.lStructSize = sizeof ofn;
+    ofn.lpstrTitle = title;
+    ofn.lpstrFile = out;
+    ofn.nMaxFile = (DWORD)n;
+    ofn.lpstrFilter = "Silent Hill 3 or its disc\0sh3.exe;*.iso;*.bin;*.cue;*.img\0All files\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.lpstrInitialDir = start && *start ? start : NULL;
+    /* NOCHANGEDIR: sh3.ini, data/ and mods/ are relative, so the dialog must not move the port's working folder. */
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER;
+    return GetOpenFileNameA(&ofn) ? 1 : 0;
 }
 
 void win_message(const char *title, const char *text) { MessageBoxA(NULL, text, title, MB_OK | MB_ICONINFORMATION); }

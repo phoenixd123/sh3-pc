@@ -6,8 +6,10 @@
 #include "../mods/mods.h"
 #include "fs.h"  /* stat_t, S_ISDIR: is this folder the game? */
 #include <stdarg.h>
+#include <ctype.h>  /* tolower: ISO 9660 names are upper case */
 #ifndef _WIN32
 #include <pthread.h>
+#include <strings.h>  /* strcasecmp, for the paths a player drags in */
 #include <unistd.h>
 #endif
 #include "host.h"
@@ -612,6 +614,263 @@ static void save_game(const char *dir) {
     rt_log("launcher: the game folder is %s (saved in %s)", dir, cfg);
 }
 
+#ifndef __SWITCH__
+/* ---- the path a player gives --------------------------------------------------------------------------
+ * The launcher is handed a path: the game's folder, the game's own sh3.exe, or the thing a player is most likely
+ * to have - a disc. A disc is read far enough to say which release it is, because Silent Hill 3 for the
+ * PlayStation 2 is a PlayStation 2 disc: MIPS code and the console's own data formats, which this recompilation of
+ * the 2003 PC build cannot run. */
+
+#define PATH_SEP(c) ((c) == '/' || (c) == 92)  /* a separator: slash, or backslash by its code */
+
+static int is_file(const char *p) {
+    stat_t st;
+    return p && *p && stat(p, &st) == 0 && !S_ISDIR(st.st_mode);
+}
+
+/* The name at the end of a path. */
+static const char *file_name(const char *p) {
+    const char *s = p + strlen(p);
+    while (s > p && !PATH_SEP(s[-1])) s--;
+    return s;
+}
+
+static uint32_t le32(const unsigned char *p) {
+    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+
+/* A PlayStation 2 program: little-endian MIPS (e_machine at 18), which is what the console's ELFs are. */
+static int mips_elf(const char *path) {
+    unsigned char h[20];
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    size_t n = fread(h, 1, sizeof h, f);
+    fclose(f);
+    return n == sizeof h && h[0] == 0x7F && h[1] == 'E' && h[2] == 'L' && h[3] == 'F' && h[18] == 8 && h[19] == 0;
+}
+
+/* ---- discs: ISO 9660 in 2048-byte sectors (.iso) or in the 2352-byte sectors of a .bin rip ---- */
+
+typedef struct { FILE *f; long stride, data; } Disc;
+
+static int disc_open(Disc *d, const char *path) {
+    static const struct { long stride, data; } ways[] = {{2048, 0}, {2352, 16}, {2352, 24}};  /* .iso, Mode 1, Mode 2 */
+    unsigned char v[8];
+    d->f = fopen(path, "rb");
+    if (!d->f) return 0;
+    for (int i = 0; i < 3; i++) {
+        d->stride = ways[i].stride;
+        d->data = ways[i].data;
+        if (!fseek(d->f, 16 * d->stride + d->data, SEEK_SET) && fread(v, 1, 8, d->f) == 8 && v[0] == 1 &&
+            !memcmp(v + 1, "CD001", 5))
+            return 1;  /* the primary volume descriptor, at sector 16 as the standard says */
+    }
+    fclose(d->f);
+    d->f = NULL;
+    return 0;
+}
+
+static int disc_read(Disc *d, uint32_t lba, void *buf, uint32_t len) {
+    if (fseek(d->f, (long)lba * d->stride + d->data, SEEK_SET)) return 0;
+    return fread(buf, 1, len, d->f) == len;
+}
+
+/* An ISO 9660 name without its ";1" version suffix. */
+static int iso_name_is(const unsigned char *rec, const char *want) {
+    int n = rec[32], w = (int)strlen(want);
+    const char *s = (const char *)rec + 33;
+    if (n >= 2 && s[n - 2] == ';') n -= 2;
+    if (n != w) return 0;
+    for (int i = 0; i < n; i++)
+        if (tolower((unsigned char)s[i]) != tolower((unsigned char)want[i])) return 0;
+    return 1;
+}
+
+/* A file in the disc's root directory: its first sector and its length. */
+static int disc_file(Disc *d, const char *name, uint32_t *lba, uint32_t *len) {
+    unsigned char pvd[2048], sec[2048];
+    uint32_t dir_lba, dir_len;
+    if (!disc_read(d, 16, pvd, sizeof pvd)) return 0;
+    dir_lba = le32(pvd + 156 + 2);   /* the root directory record inside the volume descriptor */
+    dir_len = le32(pvd + 156 + 10);
+    for (uint32_t done = 0; done < dir_len && done < (1u << 20); done += 2048) {
+        uint32_t n = dir_len - done < 2048 ? dir_len - done : 2048;
+        if (!disc_read(d, dir_lba + done / 2048, sec, n)) return 0;
+        for (uint32_t i = 0; i + 33 < n && sec[i];) {
+            if (sec[i + 32] && iso_name_is(sec + i, name)) {
+                *lba = le32(sec + i + 2);
+                *len = le32(sec + i + 10);
+                return 1;
+            }
+            i += sec[i];
+        }
+    }
+    return 0;
+}
+
+/* The program the disc starts, from SYSTEM.CNF's "BOOT2 = cdrom0:\SLUS_206.22;1". */
+static int disc_boot(Disc *d, char *out, size_t n) {
+    unsigned char b[600];
+    uint32_t lba, len;
+    char *v, *e;
+    if (!disc_file(d, "SYSTEM.CNF", &lba, &len)) return 0;
+    if (len > sizeof b - 1) len = sizeof b - 1;
+    if (!disc_read(d, lba, b, len)) return 0;
+    b[len] = 0;
+    if (!(v = strstr((char *)b, "BOOT")) || !(v = strchr(v, '='))) return 0;
+    v++;
+    while (*v == ' ' || *v == '\t') v++;
+    if ((e = strchr(v, ':')) != NULL) v = e + 1;  /* drop "cdrom0:" */
+    while (*v == '\\' || *v == '/') v++;
+    for (e = v; *e && *e != ';' && *e != ' ' && *e != '\t' && *e != '\r' && *e != '\n'; e++) {}
+    *e = 0;
+    if (!*v) return 0;
+    snprintf(out, n, "%s", v);
+    return 1;
+}
+
+/* The image a .cue describes: its FILE line, made relative to the .cue itself. */
+static int cue_image(const char *cue, char *out, size_t n) {
+    char line[512];
+    int ok = 0;
+    FILE *f = fopen(cue, "r");
+    while (f && !ok && fgets(line, sizeof line, f)) {
+        char *p = line, *e;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncasecmp(p, "FILE", 4)) continue;
+        p += 4;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '"') {
+            if (!(e = strrchr(++p, '"'))) continue;
+        } else if (!(e = strrchr(p, ' '))) continue;  /* FILE name BINARY */
+        *e = 0;
+        snprintf(out, n, "%.*s%s", (int)(file_name(cue) - cue), cue, p);
+        ok = is_file(out);
+    }
+    if (f) fclose(f);
+    return ok;
+}
+
+/* What to do instead, at the end of every refusal that has an answer. */
+static const char *const ask_for_pc =
+    "\n\nGive the port the game's sh3.exe, the folder that holds it, or a Silent Hill 3 disc.";
+
+/* The folder a path means, when it is the game: NULL, and `dir` holds the folder. Otherwise a sentence saying what
+ * the path was instead - this is where the launcher's wording lives, for the command line, the picker and the
+ * Options screen alike. The sentence sits in a buffer this function owns: it holds until the next call. */
+const char *rt_game_path(const char *given, char *dir, size_t n) {
+    static char why[1200];
+    char parent[700], image[700], boot[300];
+    uint32_t lba, len;
+    Disc d;
+    if (is_folder(given)) {
+        if (game_folder(given)) {
+            snprintf(dir, n, "%s", given);
+            return NULL;
+        }
+        snprintf(why, sizeof why, "That folder is not a Silent Hill 3 install:\n\n%s\n\n"
+                                  "Pick the folder that holds sh3.exe and data/.", given);
+        return why;
+    }
+    if (!is_file(given)) {
+        snprintf(why, sizeof why, "There is nothing at\n\n%s", given);
+        return why;
+    }
+    /* The game's own executable, or a file from inside the install: the folder it is in is the game. */
+    {
+        const char *base = file_name(given);
+        size_t k = (size_t)(base - given);
+        if (k && k < sizeof parent) {
+            memcpy(parent, given, k);
+            parent[k] = 0;
+            while (k > 1 && PATH_SEP(parent[k - 1]) && !(k == 3 && parent[1] == ':')) parent[--k] = 0;
+            if (game_folder(parent)) {
+                snprintf(dir, n, "%s", parent);
+                return NULL;
+            }
+        }
+    }
+    if (mips_elf(given)) {
+        snprintf(why, sizeof why, "That is a PlayStation 2 program (%s): MIPS code with the console's own data "
+                                  "formats.\n\nThis port recompiles the 2003 PC release, so it cannot run it. Install "
+                                  "the PC discs and give it the installed sh3.exe.", file_name(given));
+        return why;
+    }
+    snprintf(image, sizeof image, "%s", given);
+    {
+        const char *dot = strrchr(given, '.');
+        if (dot && !strcasecmp(dot + 1, "cue")) cue_image(given, image, sizeof image);  /* the .bin beside it */
+    }
+    if (disc_open(&d, image)) {
+        int ps2 = disc_boot(&d, boot, sizeof boot);
+        int pc = !ps2 && (disc_file(&d, "SH3.EXE", &lba, &len) || disc_file(&d, "SETUP.EXE", &lba, &len));
+        fclose(d.f);
+        if (ps2) {
+            snprintf(why, sizeof why, "That is Silent Hill 3 for the PlayStation 2: the disc starts %s, which is MIPS "
+                                      "code with the console's own data formats.\n\nThis port recompiles the 2003 PC "
+                                      "release, so it cannot run it. Install the PC discs and give it the installed "
+                                      "sh3.exe, or the folder that holds it.", boot);
+            return why;
+        }
+        if (pc) {
+            snprintf(why, sizeof why, "That is a Silent Hill 3 installation disc, not an installed copy.\n\n"
+                                      "Install it (keep the Movies option: that is the FMVs), then give the port the "
+                                      "folder that holds sh3.exe and data/.");
+            return why;
+        }
+        snprintf(why, sizeof why, "That disc is not Silent Hill 3 (%s)%s", file_name(image), ask_for_pc);
+        return why;
+    }
+    snprintf(why, sizeof why, "That file is not part of Silent Hill 3 (%s)%s", file_name(given), ask_for_pc);
+    return why;
+}
+
+/* Says something in the log, and on screen when there is a screen for it. */
+void rt_say(const char *text) {
+    rt_log("%s", text);
+#ifdef _WIN32
+    win_message("Silent Hill 3", text);
+#endif
+}
+#endif /* !__SWITCH__ */
+
+
+/* dir made absolute, so the log, the saves and the shader cache name the same folder however the port was
+ * started; dir itself when that fails. */
+static const char *absolute_dir(const char *dir, char *out, size_t n) {
+#ifdef _WIN32
+    return _fullpath(out, dir, n) ? out : dir;
+#elif !defined(__SWITCH__)
+    return realpath(dir, out) ? out : dir;
+#else
+    (void)out;
+    (void)n;
+    return dir;
+#endif
+}
+
+/* The launcher's "Game location" rows: checks the folder, moves the port into it and remembers it. The launcher runs
+ * before anything of the game is loaded, so that is the whole of the change; it reloads sh3.ini, mods/ and the
+ * menu sounds itself. */
+int rt_set_game_dir(const char *dir) {
+    char full[700];
+    const char *root = absolute_dir(dir, full, sizeof full);
+    if (!game_folder(root) || chdir(root)) return 0;
+    snprintf(rt_game_dir, sizeof rt_game_dir, "%s", root);
+    save_game(rt_game_dir);
+    return 1;
+}
+
+#ifdef _WIN32
+int rt_pick_game_folder(const char *start, char *out, size_t n) {
+    return win_pick_path("Where is Silent Hill 3? Pick the folder that holds sh3.exe and data/", start, out, n);
+}
+
+int rt_pick_game_disc(const char *start, char *out, size_t n) {
+    return win_pick_file("Where is Silent Hill 3? Pick sh3.exe or the disc", start, out, n);
+}
+#endif
+
 int main(int argc, char **argv) {
     char dir[700] = "";
 #ifdef __SWITCH__
@@ -623,19 +882,16 @@ int main(int argc, char **argv) {
         else socketExit();
     }
 #else
-    /* An argument (or SH3_DIR) that is not the game is an error, not a reason to ask: it is what a shortcut or a
-     * script passes, and quietly using another folder would hide the mistake. */
+    /* An argument (or SH3_DIR) that is not the game is an error, not a reason to ask: it is what a shortcut, a
+     * dropped file or a script passes, and quietly using another folder would hide the mistake. A path can be the
+     * game's folder, the game's own sh3.exe, or a disc, which is read far enough to be named. */
     const char *given = argc > 1 && argv[1][0] ? argv[1] : getenv("SH3_DIR");
     if (given) {
-        if (!game_folder(given)) {
-            rt_log("%s is not a Silent Hill 3 folder: it needs sh3.exe and data/", given);
-#ifdef _WIN32
-            win_message("Silent Hill 3", "That folder is not a Silent Hill 3 install.\n\n"
-                                        "Pick the folder that holds sh3.exe and data/.");
-#endif
+        const char *why = rt_game_path(given, dir, sizeof dir);
+        if (why) {
+            rt_say(why);
             return 1;
         }
-        snprintf(dir, sizeof dir, "%s", given);
     } else {
         char here[700] = "", start[700] = "";
         if (saved_game(dir, sizeof dir) && !game_folder(dir)) dir[0] = 0;
@@ -643,14 +899,13 @@ int main(int argc, char **argv) {
         if (!dir[0] && game_folder(".")) snprintf(dir, sizeof dir, ".");
         if (!dir[0]) saved_game(start, sizeof start);  /* where the picker opens: the folder it used last */
 #ifdef _WIN32
-        /* First launch: the shell's folder picker, until it names a folder that is the game or is closed. */
+        /* First launch: the shell's picker, until it names something that is the game or is closed. */
         while (!dir[0]) {
-            if (!win_pick_folder("Where is Silent Hill 3 installed? Pick the folder that holds sh3.exe and data/",
-                                 start, dir, sizeof dir))
-                break;
-            if (game_folder(dir)) break;
-            win_message("Silent Hill 3", "That folder has no sh3.exe and data/ in it.\n\n"
-                                        "Pick the folder the game was installed into.");
+            char picked[700];
+            const char *why;
+            if (!rt_pick_game_folder(start, picked, sizeof picked)) break;
+            if (!(why = rt_game_path(picked, dir, sizeof dir))) break;
+            rt_say(why);
             dir[0] = 0;
         }
 #endif
@@ -661,15 +916,8 @@ int main(int argc, char **argv) {
                "port's executable in the game folder (sh3.exe and data/ beside it)");
         return 1;
     }
-    /* Absolute, so the log, the saves and the shader cache name the same folder however the port was started. */
     char full[700];
-#ifdef _WIN32
-    const char *root = _fullpath(full, dir, sizeof full) ? full : dir;
-#elif !defined(__SWITCH__)
-    const char *root = realpath(dir, full) ? full : dir;
-#else
-    const char *root = dir;
-#endif
+    const char *root = absolute_dir(dir, full, sizeof full);
     snprintf(rt_game_dir, sizeof rt_game_dir, "%s", root);
     if (chdir(rt_game_dir)) rt_fatal("cannot enter %s", rt_game_dir);
 #ifndef __SWITCH__
@@ -679,7 +927,6 @@ int main(int argc, char **argv) {
     if (bytes != GAME_EXE_BYTES)
         rt_log("warning: sh3.exe is %ld bytes; this build's recompiled code is the %ld-byte copy, so a different "
                "executable will crash (see README, \"Where the game files come from\")", bytes, (long)GAME_EXE_BYTES);
-    mods_init();  /* mods/ under the game folder, before anything loads an asset */
     mods_init();  /* mods/ under the game folder, before anything loads an asset */
     rt_trace = getenv("SH3_TRACE") != NULL;
     if (getenv("SH3_COVER")) cover_from = abs(atoi(getenv("SH3_COVER"))), cover_all = atoi(getenv("SH3_COVER")) < 0;

@@ -51,6 +51,17 @@ extern int rt_frame;                 /* frames presented so far */
 extern int rt_trace;                 /* SH3_TRACE=1: log every bridged call */
 extern int rt_shot_request;           /* F12 (user32.c): write a PNG of the next presented frame */
 extern char rt_game_dir[512];        /* folder with sh3.exe and data/ */
+/* The launcher's Game location (rt_core.c). rt_game_path follows the path a player gives - a folder, the game's
+ * own sh3.exe, or a disc - to the folder it means, or returns a sentence saying what the path was instead;
+ * rt_set_game_dir then moves the port there and remembers it in sh3-pc.ini. */
+const char *rt_game_path(const char *path, char *dir, size_t n);
+int rt_set_game_dir(const char *dir);  /* 1 when the port now runs from that folder */
+void rt_say(const char *text);         /* the log, and a message box when there is one */
+#ifdef _WIN32
+/* The Options rows' pickers: the folder dialog for the install, the open-file dialog for sh3.exe or a disc. */
+int rt_pick_game_folder(const char *start, char *out, size_t n);
+int rt_pick_game_disc(const char *start, char *out, size_t n);
+#endif
 extern int rt_hd_textures;            /* hd= in sh3.ini: mods' texture packs replace the game's textures */
 extern int rt_aniso;                  /* aniso= in sh3.ini: anisotropic filtering, 1 = off */
 uint32_t galloc(uint32_t size);      /* guest heap, 16-byte aligned, zeroed */
