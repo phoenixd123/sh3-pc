@@ -8,7 +8,7 @@
 </div>
 <h1 align=center>Silent Hill 3 — PC (and Switch)</h1>
 
-<p align=center><b>1.7.1</b> — ported to PC by <b>phoenixd123</b></p>
+<p align=center><b>1.8.0</b> — ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
@@ -334,23 +334,31 @@ Windows layer does differently, are in [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOW
 
 ### Steam Deck
 
-The Deck runs the Linux build. SteamOS is Arch-based and its root is read-only, so build in a `distrobox` (or any
-Arch container) with the same steps as above, or install the packages to your home:
+The Deck plays Windows games through Proton, and this launcher is a Windows program, so **the release zip is the
+Deck build**: no separate download. There is no native Linux build of the launcher - the game it starts is a
+Windows executable anyway, and Proton is how that runs.
 
-```sh
-sudo pacman -S --needed base-devel cmake ninja python python-pip sdl2 libgl
-python -m venv .venv && .venv/bin/pip install -r requirements.txt
-ln -s "/home/deck/games/Silent Hill 3" game
-tools/regen.sh                                  # recompiles your sh3.exe (~5 min)
-cmake -S . -B build/linux -G Ninja && cmake --build build/linux
-build/linux/sh3 game
-```
+1. In Desktop Mode, copy `sh3-pc-launcher-1.8.0-win64.zip` and your Full-Rip zip to the Deck, e.g.
+   `~/Games/Silent Hill 3/`. Unzip the launcher there.
+2. Steam -> **Games -> Add a Non-Steam Game** -> browse to `sh3-pc-launcher.exe`.
+3. Right-click it -> **Properties -> Compatibility** -> force **Proton Experimental** (or Proton GE).
+4. Launch it from Game Mode. **Options -> Import the download**, pick the Full-Rip zip, then **Play**.
 
-Then add `build/linux/sh3` to Steam as a non-Steam game with the game folder as its argument, and set the
-compatibility tool to none (it is a native Linux program). The Deck's GPU has the OpenGL 4.3 the port asks for.
-The release zip is the **Windows launcher only**: it has no recompiled game code, so a Deck has to build from its
-own copy, exactly as a Windows source build does. Nothing here has been tried on a Deck; the Linux build is the
-one this repository is developed against.
+Two things used to break under Proton and no longer do:
+
+- **Importing the zip** needed Windows' `tar.exe`, which a Proton prefix does not have. The archive is now read by
+  the launcher itself, so Import works on the Deck exactly as it does on Windows.
+- **"The game is not installed properly"**: the install entry is written straight into the Proton prefix (its
+  HKLM is the prefix's own registry), so there is no permission prompt and no manual `.reg` on the Deck.
+
+Controls in the launcher: **A** picks, **B** goes back, the D-pad or left stick moves, **Start** also picks. The
+window is 1280x720, so a 1280x800 Deck screen shows thin bars top and bottom. Widescreen and the CRT/VHS filters
+are in Options; the fog settings behind the burning hallway belong to the game's own executable, not to a
+launcher.
+
+The release zip is still the **Windows launcher only** - it contains no game code. The recompiled port in
+`src/` also builds natively on Linux (`cmake -S . -B build/linux -G Ninja`), but nothing here has been run on a
+Deck or under Proton, and there is no prebuilt Linux launcher.
 
 To make a mod, see [MODDING.md](MODDING.md).
 

@@ -19,6 +19,7 @@
 #endif
 #ifdef _WIN32
 #include <shellapi.h>  /* ShellExecute: the PCSX2 page */
+#include "miniz.h"     /* the built-in zip reader: Proton has no tar.exe */
 #endif
 
 /* ---- register file and runtime globals the generated code links against ---- */
@@ -990,6 +991,16 @@ static int same_install_dir(const char *a, const char *b) {
     return !strcasecmp(x, y);
 }
 
+/* Wine and Proton: ntdll exports wine_get_version, and HKLM is the prefix's own registry, not the system's. */
+static int on_wine(void) {
+    static int known = -1;
+    if (known < 0) {
+        HMODULE n = GetModuleHandleA("ntdll.dll");
+        known = n && GetProcAddress(n, "wine_get_version") ? 1 : 0;
+    }
+    return known;
+}
+
 static int registry_ready(const char *dir) {
     char v[700];
     if (reg_read(HKEY_LOCAL_MACHINE, sh3_reg_sub, "installdir", v, sizeof v) && same_install_dir(v, dir)) return 1;
@@ -1100,7 +1111,22 @@ int rt_run_original(void) {
         return 0;
     }
     write_user_registry(rt_game_dir);
-    if (!registry_ready(rt_game_dir)) {
+    if (on_wine()) {
+        /* Steam Deck: the prefix is the whole installation, so both views go in directly. */
+        char root[700], save[700], out[700];
+        snprintf(root, sizeof root, "%s\\", rt_game_dir);
+        snprintf(save, sizeof save, "%s\\savedata\\", rt_game_dir);
+        for (int s = 0; s < 2; s++) {
+            const char *sub = s ? sh3_reg_sub32 : sh3_reg_sub;
+            reg_write(HKEY_LOCAL_MACHINE, sub, "movie", root);
+            reg_write(HKEY_LOCAL_MACHINE, sub, "sound", root);
+            reg_write(HKEY_LOCAL_MACHINE, sub, "data", root);
+            reg_write(HKEY_LOCAL_MACHINE, sub, "save", save);
+            reg_write(HKEY_LOCAL_MACHINE, sub, "installdir", root);
+        }
+        (void)out;
+        rt_log("launcher: Proton prefix: wrote the install entry for %s", rt_game_dir);
+    } else if (!registry_ready(rt_game_dir)) {
         snprintf(text, sizeof text,
                  "Windows has no Silent Hill 3 entry for this folder, or it points somewhere else. The game's own "
                  "sh3.exe refuses to start without it (\"The game is not installed properly\").\n\n"
@@ -1247,15 +1273,62 @@ static int find_install(const char *root, int depth, char *out, size_t n) {
     return found;
 }
 
+/* Proton and the Steam Deck have no tar.exe, so the same zip is read here: miniz walks the archive's index
+ * and streams each entry to disk. The names are the archive's, with / turned into Windows' separator. */
+static void make_parents(const char *path) {
+    char tmp[1000];
+    snprintf(tmp, sizeof tmp, "%s", path);
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p != '\\' && *p != '/') continue;
+        char c = *p;
+        *p = 0;
+        if (*tmp && !is_folder(tmp)) mkdir(tmp, 0755);
+        *p = c;
+    }
+}
+
+static int unzip_zip(const char *zip, const char *dest, char *err, size_t errn) {
+    mz_zip_archive z;
+    memset(&z, 0, sizeof z);
+    if (!mz_zip_reader_init_file(&z, zip, 0)) {
+        snprintf(err, errn, "%s could not be read as a zip. If the download was interrupted, download it again.",
+                 file_name(zip));
+        return 0;
+    }
+    int n = (int)mz_zip_reader_get_num_files(&z), bad = 0;
+    for (int i = 0; i < n && !bad; i++) {
+        mz_zip_archive_file_stat st;
+        char name[900], out[1200];
+        if (!mz_zip_reader_file_stat(&z, i, &st)) continue;
+        snprintf(name, sizeof name, "%s", st.m_filename);
+        for (char *q = name; *q; q++) if (*q == '/') *q = '\\';
+        char *q = name;
+        while (*q == '\\' || *q == '/') q++;
+        memmove(name, q, strlen(q) + 1);
+        if (!name[0] || strstr(name, "..")) continue;  /* never outside the folder it is unpacking into */
+        snprintf(out, sizeof out, "%s\\%s", dest, name);
+        make_parents(out);
+        if (st.m_is_directory || name[strlen(name) - 1] == '\\') {
+            if (!is_folder(out)) mkdir(out, 0755);
+            continue;
+        }
+        if (!mz_zip_reader_extract_to_file(&z, i, out, 0)) {
+            snprintf(err, errn, "Unpacking stopped at\n\n%s\n\nThe archive may be incomplete.", name);
+            bad = 1;
+        }
+    }
+    mz_zip_reader_end(&z);
+    return !bad;
+}
+
 static int unpack_zip(const char *zip, const char *dest, char *err, size_t errn) {
     char tar[700], cmd[2400];
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
     DWORD code = 0;
-    if (!find_tar(tar, sizeof tar)) {
-        snprintf(err, errn, "Windows' own tar.exe was not found. Extract %s with 7-Zip, then pick the folder "
-                            "that holds sh3.exe and data/.", file_name(zip));
-        return 0;
+    if (getenv("SH3_NO_TAR") || !find_tar(tar, sizeof tar)) {  /* Proton, or a Windows without tar */
+        rt_log("launcher: unpacking %s with the built-in reader", file_name(zip));
+        return unzip_zip(zip, dest, err, errn);
     }
     snprintf(cmd, sizeof cmd, "\"%s\" -xvf \"%s\" -C \"%s\"", tar, zip, dest);
     memset(&si, 0, sizeof si);

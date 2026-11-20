@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.0 - Steam Deck (Proton)
+
+- **Import without `tar.exe`.** A Proton prefix has no `tar.exe`, so Import (and mod zips) failed on the Deck.
+  The archive is now unpacked by the launcher itself with miniz: entries stream to disk, `/` becomes `\`, and
+  `..` paths are skipped. Windows still uses `tar.exe` when it has one; `SH3_NO_TAR=1` forces the built-in reader.
+- **Install entry in the Proton prefix.** `wine_get_version` in `ntdll` is the test; under it the launcher writes
+  `HKLM\SOFTWARE\WOW6432Node\KONAMI\SILENT HILL 3` and the 32-bit view directly instead of asking for
+  administrator rights, which Proton does not have. Windows behaviour is unchanged.
+- Controller navigation (A/B, D-pad, left stick, Start) was already in the launcher; the README now documents the
+  Deck setup with it, and how to add the launcher to Steam with Proton.
+- Tested on Windows: the built-in reader unpacks a 369 KB zip with nested folders to byte-identical files
+  (300 KB deflate payload), finds `sh3.exe` with `data/`, and saves the folder; the `tar.exe` path still works.
+  Not tested on a Deck or under Proton.
+
 ## 1.7.1 - the copy's registry entry
 
 - **"The game is not installed properly".** That box is the game's own: it asks Windows where it was installed
