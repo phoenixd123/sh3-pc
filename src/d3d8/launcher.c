@@ -4,6 +4,7 @@
  * a fresh GL state. */
 #include "d3d8.h"
 #include "../mods/mods.h"  /* mods_init: Options > Game folder re-reads mods/ */
+#include "../runtime/win_posix.h"  /* win_confirm: Check this copy asks before it switches folders */
 #include <SDL2/SDL.h>
 #include <math.h>
 
@@ -223,9 +224,10 @@ static Opt opts[] = {
 #ifdef _WIN32
 #define ROW_FOLDER N_OPTS
 #define ROW_DISC (N_OPTS + 1)
-#define ROW_IMPORT (N_OPTS + 2)
-#define ROW_MOD (N_OPTS + 3)
-#define ROW_BACK (N_OPTS + 4)
+#define ROW_CHECK (N_OPTS + 2)
+#define ROW_IMPORT (N_OPTS + 3)
+#define ROW_MOD (N_OPTS + 4)
+#define ROW_BACK (N_OPTS + 5)
 #else
 #define ROW_BACK N_OPTS
 #endif
@@ -292,7 +294,7 @@ static void ini_save(void) {
 
 /* ---- input ---- */
 
-enum { IN_NONE, IN_UP, IN_DOWN, IN_LEFT, IN_RIGHT, IN_OK, IN_BACK };
+enum { IN_NONE, IN_UP, IN_DOWN, IN_LEFT, IN_RIGHT, IN_OK, IN_BACK, IN_DROP };
 
 /* Testing: the same SH3_KEYS script the game takes drives the menus too, so Options and its pickers can be
  * walked without a keyboard (SH3_LAUNCHER=1 keeps the launcher up for it). One return per script entry. */
@@ -328,11 +330,18 @@ static int scripted_menu_key(void) {
     return IN_NONE;
 }
 
+/* A file or folder dropped on the window (SDL_DROPFILE), handed to handle_drop by the screen loops. */
+static char drop_file[700];
+
 static int poll_input(void) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_QUIT: exit(0);
+        case SDL_DROPFILE:
+            snprintf(drop_file, sizeof drop_file, "%s", e.drop.file);
+            SDL_free(e.drop.file);
+            return IN_DROP;
         case SDL_CONTROLLERDEVICEADDED: SDL_GameControllerOpen(e.cdevice.which); break;
         case SDL_KEYDOWN:
             switch (e.key.keysym.sym) {
@@ -567,6 +576,10 @@ static void draw_options(int sel) {
             text(140, y, 36, c, "Game disc or file");
             continue;
         }
+        if (i == ROW_CHECK) {
+            text(140, y, 36, c, "Check this copy");
+            continue;
+        }
         if (i == ROW_IMPORT) {
             text(140, y, 36, c, "Import a .zip download");
             continue;
@@ -601,6 +614,56 @@ static void fade(int in) {
     memcpy(canvas, pic, sizeof pic);
 }
 
+/* The three things a picked or dropped path can lead to, shared by the rows and the window's drops. */
+static void use_game_dir(const char *dir) {
+    ini_save();
+    if (rt_set_game_dir(dir)) {
+        ini_load();      /* the new folder's sh3.ini */
+        mods_init();     /* and its mods/ */
+        sound_reload();  /* and its sd.afs */
+        row_note = "Game location changed";
+    } else
+        row_note = "That folder can no longer be entered";
+}
+
+static void import_zip(const char *zip) {
+    char dir[700], err[700] = "";
+    if (rt_import_archive(zip, dir, sizeof dir, err, sizeof err)) {
+        use_game_dir(dir);
+        row_note = "Imported the download";
+    } else
+        rt_say(err);
+}
+
+/* A file or folder dropped on the launcher window: the same answer as Check this copy, acted on when it can be.
+ * The point of dragging is not to have to find the row afterwards. */
+static void handle_drop(const char *path) {
+    char dir[700], msg[1200], err[700] = "";
+    int kind = rt_check_copy(path, dir, sizeof dir, msg, sizeof msg);
+    row_note = NULL;
+    if (kind == RT_COPY_GAME) {
+        use_game_dir(dir);
+        if (row_note) rt_say(row_note);
+    } else if (kind == RT_COPY_DOWNLOAD) {
+        import_zip(path);
+        if (row_note) rt_say(row_note);
+    } else if (kind == RT_COPY_MOD) {
+        char name[128];
+        if (mods_install(path, name, sizeof name, err, sizeof err)) {
+            static char note[160];
+            mods_init();  /* and it is live for the game that starts after this menu */
+            snprintf(note, sizeof note, "Installed the mod \"%s\"", name);
+            row_note = note;
+            rt_say(note);
+        } else
+            rt_say(err);
+    } else if (kind == RT_COPY_PS2) {
+        rt_ps2_offer(rt_ps2_path);
+    } else
+        rt_say(msg);
+    if (row_note) rt_log("launcher: %s", row_note);
+}
+
 static void options(void) {
     int sel = 0;
     row_note = NULL;
@@ -610,6 +673,11 @@ static void options(void) {
         if (dirty) { draw_options(sel); dirty = 0; }
         present(canvas, CW, CH);
         int in = poll_input();
+        if (in == IN_DROP) {
+            handle_drop(drop_file);
+            draw_options(sel);
+            continue;
+        }
         if (in == IN_NONE) continue;
         dirty = 1;
         Opt *o = sel < N_OPTS ? &opts[sel] : NULL;
@@ -639,15 +707,35 @@ static void options(void) {
                                                  : "PlayStation 2 disc: PCSX2 is not installed";
                 if (row_note) rt_log("launcher: %s", row_note);
             }
-            else if (got) {
-                ini_save();  /* what was changed here belongs to the folder the port is leaving */
-                if (rt_set_game_dir(dir)) {
-                    ini_load();      /* the new folder's sh3.ini */
-                    mods_init();     /* and its mods/ */
-                    sound_reload();  /* and its sd.afs */
-                    row_note = "Game location changed";
-                } else
-                    row_note = "That folder can no longer be entered";
+            else if (got) use_game_dir(dir);
+        }
+#endif
+#ifdef _WIN32
+        /* Check this copy: name what was picked, then offer the step that uses it. */
+        if (sel == ROW_CHECK && (in == IN_LEFT || in == IN_RIGHT || in == IN_OK)) {
+            char picked[700], dir[700], msg[1200];
+            if (rt_pick_copy(picked, sizeof picked)) {
+                int kind = rt_check_copy(picked, dir, sizeof dir, msg, sizeof msg);
+                if (kind == RT_COPY_GAME) {
+                    row_note = "Playable copy";
+                    if (win_confirm("Silent Hill 3", msg)) use_game_dir(dir);
+                } else if (kind == RT_COPY_DOWNLOAD) {
+                    row_note = "Full-Rip download";
+                    if (win_confirm("Silent Hill 3", msg)) import_zip(picked);
+                } else if (kind == RT_COPY_PS2) {
+                    row_note = "PlayStation 2 disc";
+                    if (!rt_ps2_offer(rt_ps2_path)) rt_say(msg);
+                } else if (kind == RT_COPY_PC_DISC) {
+                    row_note = "PC installation disc";
+                    rt_say(msg);
+                } else if (kind == RT_COPY_MOD) {
+                    row_note = "Mod archive";
+                    rt_say(msg);
+                } else {
+                    row_note = "Not a Silent Hill 3 copy";
+                    rt_say(msg);
+                }
+                rt_log("launcher: %s", row_note);
             }
         }
 #endif
@@ -655,21 +743,8 @@ static void options(void) {
         /* The download: the Full-Rip zip is unpacked beside itself and the install inside it becomes the game
          * folder, so a player who has only downloaded the archive does not have to unpack it by hand. */
         if (sel == ROW_IMPORT && (in == IN_LEFT || in == IN_RIGHT || in == IN_OK)) {
-            char zip[700], dir2[700], err[700] = "";
-            if (rt_pick_game_archive(zip, sizeof zip)) {
-                if (rt_import_archive(zip, dir2, sizeof dir2, err, sizeof err)) {
-                    ini_save();
-                    if (rt_set_game_dir(dir2)) {
-                        ini_load();
-                        mods_init();
-                        sound_reload();
-                        row_note = "Imported the download";
-                    } else
-                        row_note = "That folder can no longer be entered";
-                    rt_log("launcher: %s", row_note);
-                } else
-                    rt_say(err);
-            }
+            char zip[700];
+            if (rt_pick_game_archive(zip, sizeof zip)) import_zip(zip);
         }
 #endif
 #ifdef _WIN32
@@ -776,11 +851,20 @@ void launcher_run(void) {
     if (!credits_seen()) credits();  /* first launch: who made this port, once */
     ini_load();
     draw_menu(0);
+    if (getenv("SH3_DROP")) {  /* a scripted drop, for tests */
+        handle_drop(getenv("SH3_DROP"));
+        draw_menu(0);
+    }
     fade(1);
     for (int sel = 0, dirty = 0;; ) {
         if (dirty) { draw_menu(sel); dirty = 0; }
         present(canvas, CW, CH);
         int in = poll_input();
+        if (in == IN_DROP) {
+            handle_drop(drop_file);
+            draw_menu(sel);
+            continue;
+        }
         if (in == IN_UP || in == IN_DOWN) sel = (sel + (in == IN_UP ? N_ITEMS - 1 : 1)) % N_ITEMS, dirty = 1, sound(SND_CURSOR);
         if (in == IN_OK) sound(SND_OK);
         if (in == IN_OK && sel == 0) {

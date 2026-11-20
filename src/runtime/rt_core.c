@@ -17,6 +17,9 @@
 #include <switch.h>
 #include <netinet/in.h>  /* __nxlink_host */
 #endif
+#ifdef _WIN32
+#include <shellapi.h>  /* ShellExecute: the PCSX2 page */
+#endif
 
 /* ---- register file and runtime globals the generated code links against ---- */
 #ifndef RECOMP_MMX_DEFINED  /* recomp_types.h only declares it for generated code */
@@ -759,6 +762,7 @@ static const char *const ask_for_pc =
     "\n\nGive the port the game's sh3.exe, the folder that holds it, or a Silent Hill 3 disc.";
 
 int rt_last_ps2;                 /* rt_game_path: the path was a PlayStation 2 disc or program */
+int rt_last_pc;                  /* rt_game_path: the path was the PC installation disc */
 char rt_ps2_path[700];           /* and where it is (the .bin for a .cue) */
 
 /* The folder a path means, when it is the game: NULL, and `dir` holds the folder. Otherwise a sentence saying what
@@ -770,6 +774,7 @@ const char *rt_game_path(const char *given, char *dir, size_t n) {
     uint32_t lba, len;
     Disc d;
     rt_last_ps2 = 0;
+    rt_last_pc = 0;
     rt_ps2_path[0] = 0;
     if (is_folder(given)) {
         if (game_folder(given)) {
@@ -831,6 +836,7 @@ const char *rt_game_path(const char *given, char *dir, size_t n) {
             return why;
         }
         if (pc) {
+            rt_last_pc = 1;
             snprintf(why, sizeof why, "That is a Silent Hill 3 installation disc, not an installed copy.\n\n"
                                       "Install it (keep the Movies option: that is the FMVs), then give the port the "
                                       "folder that holds sh3.exe and data/.");
@@ -905,9 +911,9 @@ int rt_ps2_offer(const char *disc) {
     }
     snprintf(text, sizeof text,
              "That is Silent Hill 3 for the PlayStation 2 (%s).\n\n"
-             "This port recompiles the 2003 PC release, so it cannot run PS2 discs or programs. PCSX2 can: install it "
-             "from pcsx2.net, then pick this disc again and the launcher will open it there.", file_name(disc));
-    win_message("Silent Hill 3", text);
+             "This port recompiles the 2003 PC release, so it cannot run PS2 discs or programs. PCSX2 can: open "
+             "pcsx2.net to download it?", file_name(disc));
+    if (win_confirm("Silent Hill 3", text)) rt_open_url("https://pcsx2.net/");
     return 1;
 #else
     (void)disc;
@@ -1041,10 +1047,19 @@ int rt_pick_game_folder(const char *start, char *out, size_t n) {
 #define GAME_FILTER "Silent Hill 3 or its disc\0sh3.exe;*.iso;*.bin;*.cue;*.img\0All files\0*.*\0"
 #define MOD_FILTER "Mod archive\0*.zip\0All files\0*.*\0"
 #define GAME_ARCHIVE_FILTER "The downloaded game archive\0*.zip\0All files\0*.*\0"
+#define CHECK_FILTER "A Silent Hill 3 copy or disc\0sh3.exe;*.zip;*.cue;*.bin;*.iso;*.img\0All files\0*.*\0"
 
 int rt_pick_game_disc(const char *start, char *out, size_t n) {
     if (test_pick(out, n)) return 1;
     return win_pick_file("Where is Silent Hill 3? Pick sh3.exe or the disc", start, GAME_FILTER, out, n);
+}
+
+/* Check this copy: one dialog for sh3.exe, a disc image or a download, so the answer names the thing that was
+ * picked. A folder can be dropped on the window instead (it is what the Game folder row is for). */
+int rt_pick_copy(char *out, size_t n) {
+    if (test_pick(out, n)) return 1;
+    return win_pick_file("Check this copy: pick sh3.exe, a disc image, or the .zip", rt_game_dir[0] ? rt_game_dir : NULL,
+                         CHECK_FILTER, out, n);
 }
 
 /* ---- importing a download ---------------------------------------------------------------------------
@@ -1297,6 +1312,51 @@ int main(int argc, char **argv) {
     host_thread_start(game_thread, NULL, 16u << 20);
     for (;;) sleep(1000);
 }
+
+#ifndef __SWITCH__  /* the launcher rows and the pickers are Windows-only */
+/* What a path is, for the Options "Check this copy" row: rt_game_path does the following (it owns the folder,
+ * sh3.exe and disc cases and their wording), and the two other kinds a player can drop are told apart here. */
+int rt_check_copy(const char *path, char *dir, size_t n, char *msg, size_t mn) {
+    const char *why = rt_game_path(path, dir, n);
+    const char *base = file_name(path), *dot = strrchr(base, '.');
+    if (!why) {
+        snprintf(msg, mn,
+                 "That is an installed copy of Silent Hill 3 for PC: sh3.exe and data/ are in\n\n%s\n\n"
+                 "Use it as the game folder now?", dir);
+        return RT_COPY_GAME;
+    }
+    if (rt_last_ps2) {
+        snprintf(msg, mn, "%s", why);
+        return RT_COPY_PS2;
+    }
+    if (rt_last_pc) {
+        snprintf(msg, mn, "%s", why);
+        return RT_COPY_PC_DISC;
+    }
+    if (dot && !strcasecmp(dot + 1, "zip")) {
+        if (zip_has_game(path)) {
+            snprintf(msg, mn,
+                     "That is the Full-Rip download: sh3.exe and data/ are inside\n\n%s\n\n"
+                     "Import it now? It unpacks beside the zip.", path);
+            return RT_COPY_DOWNLOAD;
+        }
+        snprintf(msg, mn, "That .zip has no sh3.exe and data/: it is a mod archive, not the game.\n\n"
+                          "Options > Install a mod installs it.");
+        return RT_COPY_MOD;
+    }
+    snprintf(msg, mn, "%s", why);
+    return RT_COPY_OTHER;
+}
+
+void rt_open_url(const char *url) {
+#ifdef _WIN32
+    ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+#else
+    (void)url;
+#endif
+}
+#endif /* !__SWITCH__ */
+
 
 #if defined(_WIN32) && defined(PORT_GUI)
 #include <windows.h>  /* WINAPI and the entry point's types */

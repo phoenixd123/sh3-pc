@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.4 - Check this copy, and drops
+
+- **Options > Check this copy** names what you picked and what to do with it: an installed copy (it offers to use
+  it), a PlayStation 2 disc (it offers PCSX2), the PC installation disc (install it first), the Full-Rip `.zip`
+  (it offers to import it), a mod archive, or something that is not Silent Hill 3.
+- **The PS2 message opens pcsx2.net when PCSX2 is not installed**, instead of only naming the site.
+- **Drag onto the launcher window**: a game folder, the game's `sh3.exe`, a disc image, the Full-Rip `.zip` or a
+  mod `.zip` is recognised and used on the spot. Dropping onto the exe still works too.
+
 ## 1.6.3 - the launcher opens without a game
 
 - **No more blank console.** The release is linked as a Windows program, so double-clicking it no longer opens a

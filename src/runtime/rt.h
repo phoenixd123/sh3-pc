@@ -70,6 +70,18 @@ int rt_pick_game_folder(const char *start, char *out, size_t n);
 int rt_pick_game_disc(const char *start, char *out, size_t n);
 int rt_pick_mod_zip(char *out, size_t n);
 int rt_pick_game_archive(char *out, size_t n);
+/* Check this copy: what a path is, in the order the Options row reports it, and a sentence that says what to
+ * do with it. rt_check_copy fills dir for a playable copy; for a PS2 disc rt_ps2_offer owns the next step. */
+#define RT_COPY_GAME 0      /* sh3.exe and data/ are there: it can be played */
+#define RT_COPY_PS2 1       /* a PlayStation 2 disc or program */
+#define RT_COPY_PC_DISC 2   /* the PC installation disc: install it first */
+#define RT_COPY_DOWNLOAD 3  /* the Full-Rip zip: import it */
+#define RT_COPY_MOD 4       /* a .zip that is a mod, not the game */
+#define RT_COPY_OTHER 5     /* something else */
+int rt_pick_copy(char *out, size_t n);
+int rt_check_copy(const char *path, char *dir, size_t n, char *msg, size_t mn);
+void rt_open_url(const char *url);
+extern int rt_last_pc;                 /* rt_game_path: the disc is the PC installation disc */
 /* A download (the Full-Rip zip of a pre-installed game): unpacked beside itself when it has not been already,
  * then the folder inside that holds sh3.exe and data/ is returned. 0 with a sentence in `err` otherwise. */
 int rt_import_archive(const char *archive, char *out, size_t n, char *err, size_t errn);
