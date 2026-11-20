@@ -69,6 +69,10 @@ void rt_say(const char *text);         /* the log, and a message box when there 
 int rt_pick_game_folder(const char *start, char *out, size_t n);
 int rt_pick_game_disc(const char *start, char *out, size_t n);
 int rt_pick_mod_zip(char *out, size_t n);
+int rt_pick_game_archive(char *out, size_t n);
+/* A download (the Full-Rip zip of a pre-installed game): unpacked beside itself when it has not been already,
+ * then the folder inside that holds sh3.exe and data/ is returned. 0 with a sentence in `err` otherwise. */
+int rt_import_archive(const char *archive, char *out, size_t n, char *err, size_t errn);
 #endif
 /* A PlayStation 2 disc or program that rt_game_path refused: rt_ps2_offer explains that this port cannot run it
  * and, on Windows, offers to open it in PCSX2. 1 when the player was answered on screen. */

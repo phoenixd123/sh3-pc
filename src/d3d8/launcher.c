@@ -223,8 +223,9 @@ static Opt opts[] = {
 #ifdef _WIN32
 #define ROW_FOLDER N_OPTS
 #define ROW_DISC (N_OPTS + 1)
-#define ROW_MOD (N_OPTS + 2)
-#define ROW_BACK (N_OPTS + 3)
+#define ROW_IMPORT (N_OPTS + 2)
+#define ROW_MOD (N_OPTS + 3)
+#define ROW_BACK (N_OPTS + 4)
 #else
 #define ROW_BACK N_OPTS
 #endif
@@ -566,6 +567,10 @@ static void draw_options(int sel) {
             text(140, y, 36, c, "Game disc or file");
             continue;
         }
+        if (i == ROW_IMPORT) {
+            text(140, y, 36, c, "Import the game download");
+            continue;
+        }
         if (i == ROW_MOD) {
             text(140, y, 36, c, "Install a mod");
             continue;
@@ -643,6 +648,27 @@ static void options(void) {
                     row_note = "Game location changed";
                 } else
                     row_note = "That folder can no longer be entered";
+            }
+        }
+#endif
+#ifdef _WIN32
+        /* The download: the Full-Rip zip is unpacked beside itself and the install inside it becomes the game
+         * folder, so a player who has only downloaded the archive does not have to unpack it by hand. */
+        if (sel == ROW_IMPORT && (in == IN_LEFT || in == IN_RIGHT || in == IN_OK)) {
+            char zip[700], dir2[700], err[700] = "";
+            if (rt_pick_game_archive(zip, sizeof zip)) {
+                if (rt_import_archive(zip, dir2, sizeof dir2, err, sizeof err)) {
+                    ini_save();
+                    if (rt_set_game_dir(dir2)) {
+                        ini_load();
+                        mods_init();
+                        sound_reload();
+                        row_note = "Imported the download";
+                    } else
+                        row_note = "That folder can no longer be entered";
+                    rt_log("launcher: %s", row_note);
+                } else
+                    rt_say(err);
             }
         }
 #endif
@@ -757,7 +783,19 @@ void launcher_run(void) {
         int in = poll_input();
         if (in == IN_UP || in == IN_DOWN) sel = (sel + (in == IN_UP ? N_ITEMS - 1 : 1)) % N_ITEMS, dirty = 1, sound(SND_CURSOR);
         if (in == IN_OK) sound(SND_OK);
-        if (in == IN_OK && sel == 0) { fade(0); break; }
+        if (in == IN_OK && sel == 0) {
+#ifdef PORT_LAUNCHER_ONLY
+            /* The launcher-only build (build/wcheck.sh, and the release asset) has no recompiled game code:
+             * say that instead of dropping the player into the crash handler. */
+            rt_say("This launcher has no recompiled game code, so it cannot start Silent Hill 3.\n\n"
+                   "Build the port from your own copy (docs/BUILD-WINDOWS.md) and run that sh3.exe.");
+            dirty = 1;
+            continue;
+#else
+            fade(0);
+            break;
+#endif
+        }
         if (in == IN_OK && sel == 1) {
             fade(0);
             options();

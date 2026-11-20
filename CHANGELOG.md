@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0 - the download, imported
+
+- **Options > Import the game download** takes the Full-Rip zip (a pre-installed copy with `sh3.exe` and
+  `data/` inside), unpacks it beside itself and makes that folder the game. A 2.6 GB archive is unpacked by
+  Windows' own `tar.exe` in its own console, so nothing is held in memory and the file list shows progress; a
+  folder that is already unpacked is reused. Dropping the zip on the executable does the same.
+- **A zip is still a mod** when it has no `sh3.exe` and `data/`: the same drop installs it into `mods/`, as
+  before. The decision is made from the archive's own file list, without unpacking it.
+- **Play in the launcher-only build says why it cannot start.** It used to drop into the crash handler; now it
+  explains that the recompiled game code is what a build of your own copy adds.
+
 ## 1.5.0 - the PS2 disc, handed to PCSX2
 
 - **A PS2 disc is no longer a dead end.** Picking one - in Options, by dropping it on the executable, or on the

@@ -966,16 +966,153 @@ int rt_pick_game_folder(const char *start, char *out, size_t n) {
 
 #define GAME_FILTER "Silent Hill 3 or its disc\0sh3.exe;*.iso;*.bin;*.cue;*.img\0All files\0*.*\0"
 #define MOD_FILTER "Mod archive\0*.zip\0All files\0*.*\0"
+#define GAME_ARCHIVE_FILTER "The downloaded game archive\0*.zip\0All files\0*.*\0"
 
 int rt_pick_game_disc(const char *start, char *out, size_t n) {
     if (test_pick(out, n)) return 1;
     return win_pick_file("Where is Silent Hill 3? Pick sh3.exe or the disc", start, GAME_FILTER, out, n);
 }
 
+/* ---- importing a download ---------------------------------------------------------------------------
+ * The Full-Rip is a zip of a pre-installed copy: sh3.exe and data/ inside, no installer and no registry.
+ * Unpacking it beside itself and finding that folder is all "installing" it takes here. Windows ships
+ * tar.exe (bsdtar), which reads zip and handles a 2.6 GB archive without loading it into memory; it runs in
+ * its own console so the file list is visible while the launcher waits. */
+static int find_tar(char *out, size_t n) {
+    const char *root = getenv("SystemRoot");
+    char p[700];
+    if (root && *root) {
+        snprintf(p, sizeof p, "%s\\System32\\tar.exe", root);
+        if (is_file(p)) { snprintf(out, n, "%s", p); return 1; }
+    }
+    return SearchPathA(NULL, "tar.exe", NULL, (DWORD)n, out, NULL) != 0;
+}
+
+/* The install inside `root`, at most four folders down: a folder holding sh3.exe and data/. */
+static int find_install(const char *root, int depth, char *out, size_t n) {
+    if (game_folder(root)) { snprintf(out, n, "%s", root); return 1; }
+    if (depth >= 4) return 0;
+    char pat[800];
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    int found = 0;
+    snprintf(pat, sizeof pat, "%s/*", root);
+    h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    do {
+        char sub[900];
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        if (!strcmp(fd.cFileName, ".") || !strcmp(fd.cFileName, "..")) continue;
+        if (!strcasecmp(fd.cFileName, "savedata") || !strcasecmp(fd.cFileName, "mods")) continue;
+        snprintf(sub, sizeof sub, "%s/%s", root, fd.cFileName);
+        if (find_install(sub, depth + 1, out, n)) { found = 1; break; }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    return found;
+}
+
+static int unpack_zip(const char *zip, const char *dest, char *err, size_t errn) {
+    char tar[700], cmd[2400];
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    DWORD code = 0;
+    if (!find_tar(tar, sizeof tar)) {
+        snprintf(err, errn, "Windows' own tar.exe was not found. Extract %s with 7-Zip, then pick the folder "
+                            "that holds sh3.exe and data/.", file_name(zip));
+        return 0;
+    }
+    snprintf(cmd, sizeof cmd, "\"%s\" -xvf \"%s\" -C \"%s\"", tar, zip, dest);
+    memset(&si, 0, sizeof si);
+    si.cb = sizeof si;
+    if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi)) {
+        snprintf(err, errn, "The archive could not be unpacked: %s", file_name(zip));
+        return 0;
+    }
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    if (code) {
+        snprintf(err, errn, "%s could not be unpacked (tar stopped with %lu).", file_name(zip), (unsigned long)code);
+        return 0;
+    }
+    return 1;
+}
+
+int rt_import_archive(const char *archive, char *out, size_t n, char *err, size_t errn) {
+    const char *base = file_name(archive), *dot = strrchr(base, '.');
+    char dest[700], stem[256];
+    size_t dirlen = (size_t)(base - archive);
+    if (!is_file(archive)) {
+        snprintf(err, errn, "There is nothing at\n\n%s", archive);
+        return 0;
+    }
+    if (!dot || strcasecmp(dot, ".zip")) {
+        snprintf(err, errn, "That is not a .zip. The Full-Rip downloads as a zip; a .rar or .7z has to be "
+                            "extracted with 7-Zip first, and then the folder that holds sh3.exe and data/ picked "
+                            "in Options > Game folder.");
+        return 0;
+    }
+    snprintf(stem, sizeof stem, "%.*s", (int)(dot - base), base);
+    if (!stem[0]) snprintf(stem, sizeof stem, "silent-hill-3");
+    if (dirlen + strlen(stem) + 2 >= sizeof dest) {
+        snprintf(err, errn, "That path is too long to unpack beside the archive.");
+        return 0;
+    }
+    snprintf(dest, sizeof dest, "%.*s%s", (int)dirlen, archive, stem);
+    if (find_install(dest, 0, out, n)) return 1;  /* already unpacked: the folder is the game */
+    if (mkdir(dest, 0755) && !is_folder(dest)) {
+        snprintf(err, errn, "The archive cannot be unpacked beside itself. Extract it with 7-Zip, then pick the "
+                            "folder that holds sh3.exe and data/.");
+        return 0;
+    }
+    if (!unpack_zip(archive, dest, err, errn)) return 0;
+    if (!find_install(dest, 0, out, n)) {
+        snprintf(err, errn, "%s was unpacked into %s, but there is no sh3.exe with data/ in it. The Full-Rip has "
+                            "them; a disc image does not.", file_name(archive), dest);
+        return 0;
+    }
+    rt_log("launcher: unpacked %s into %s", archive, dest);
+    return 1;
+}
+
+int rt_pick_game_archive(char *out, size_t n) {
+    if (test_pick(out, n)) return 1;
+    return win_pick_file("Where is the downloaded game archive?", NULL, GAME_ARCHIVE_FILTER, out, n);
+}
+
 int rt_pick_mod_zip(char *out, size_t n) {
     return win_pick_file("Install a mod: pick its .zip", rt_game_dir, MOD_FILTER, out, n);
 }
 #endif
+
+/* A zip can be a mod or the whole downloaded game. The Full-Rip has sh3.exe and data/ in it; a mod does not.
+ * This reads only the tail of the archive (its central directory), so a 2.6 GB download costs nothing. */
+static int zip_has_game(const char *path) {
+    FILE *f = fopen(path, "rb");
+    long n, win, i;
+    unsigned char *buf;
+    int exe = 0, data = 0;
+    if (!f) return 0;
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    win = n < (4L << 20) ? n : (4L << 20);
+    buf = malloc((size_t)win);
+    if (!buf || win <= 0 || fseek(f, n - win, SEEK_SET) || fread(buf, 1, (size_t)win, f) != (size_t)win) {
+        free(buf);
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+    for (i = 0; i + 7 <= win; i++) {
+        if (!exe && !strncasecmp((const char *)buf + i, "sh3.exe", 7)) exe = 1;
+        if (!data && ((i + 6 <= win && !strncasecmp((const char *)buf + i, "/data/", 6)) ||
+                      (i + 5 <= win && !strncasecmp((const char *)buf + i, "data/", 5)))) data = 1;
+        if (exe && data) break;
+    }
+    free(buf);
+    return exe && data;
+}
 
 int main(int argc, char **argv) {
     char dir[700] = "";
@@ -994,7 +1131,7 @@ int main(int argc, char **argv) {
     const char *given = argc > 1 && argv[1][0] ? argv[1] : getenv("SH3_DIR");
     /* A mod archive dropped on the port: install it into the game the port already knows and start that game, which
      * is what dropping it is for. It never becomes the game path. */
-    if (given && zip_arg(given)) {
+    if (given && zip_arg(given) && !zip_has_game(given)) {
         char zpath[700], target[700], name[128], err[600] = "";
         const char *zip = absolute_dir(given, zpath, sizeof zpath);
         given = NULL;  /* a mod archive is never the game path */
@@ -1010,7 +1147,21 @@ int main(int argc, char **argv) {
         rt_log("launcher: installed the mod \"%s\"; starting the game", name);
     }
     if (given) {
-        const char *why = rt_game_path(given, dir, sizeof dir);
+        const char *why;
+#ifdef _WIN32
+        const char *suffix = strrchr(file_name(given), '.');
+        if (suffix && !strcasecmp(suffix, ".zip")) {
+            char unpacked[700], err[700];
+            if (rt_import_archive(given, unpacked, sizeof unpacked, err, sizeof err)) {
+                rt_log("launcher: %s is the game", unpacked);
+                given = unpacked;
+            } else {
+                rt_say(err);
+                return 1;
+            }
+        }
+#endif
+        why = rt_game_path(given, dir, sizeof dir);
         if (why) {
             if (!rt_last_ps2 || !rt_ps2_offer(rt_ps2_path)) rt_say(why);
             return 1;
