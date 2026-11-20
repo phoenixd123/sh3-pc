@@ -755,6 +755,9 @@ static int cue_image(const char *cue, char *out, size_t n) {
 static const char *const ask_for_pc =
     "\n\nGive the port the game's sh3.exe, the folder that holds it, or a Silent Hill 3 disc.";
 
+int rt_last_ps2;                 /* rt_game_path: the path was a PlayStation 2 disc or program */
+char rt_ps2_path[700];           /* and where it is (the .bin for a .cue) */
+
 /* The folder a path means, when it is the game: NULL, and `dir` holds the folder. Otherwise a sentence saying what
  * the path was instead - this is where the launcher's wording lives, for the command line, the picker and the
  * Options screen alike. The sentence sits in a buffer this function owns: it holds until the next call. */
@@ -763,6 +766,8 @@ const char *rt_game_path(const char *given, char *dir, size_t n) {
     char parent[700], image[700], boot[300];
     uint32_t lba, len;
     Disc d;
+    rt_last_ps2 = 0;
+    rt_ps2_path[0] = 0;
     if (is_folder(given)) {
         if (game_folder(given)) {
             snprintf(dir, n, "%s", given);
@@ -791,6 +796,8 @@ const char *rt_game_path(const char *given, char *dir, size_t n) {
         }
     }
     if (mips_elf(given)) {
+        rt_last_ps2 = 1;
+        snprintf(rt_ps2_path, sizeof rt_ps2_path, "%s", given);
         snprintf(why, sizeof why, "That is a PlayStation 2 program (%s): MIPS code with the console's own data "
                                   "formats.\n\nThis port recompiles the 2003 PC release, so it cannot run it. Install "
                                   "the PC discs and give it the installed sh3.exe.", file_name(given));
@@ -806,6 +813,8 @@ const char *rt_game_path(const char *given, char *dir, size_t n) {
         int pc = !ps2 && (disc_file(&d, "SH3.EXE", &lba, &len) || disc_file(&d, "SETUP.EXE", &lba, &len));
         fclose(d.f);
         if (ps2) {
+            rt_last_ps2 = 1;
+            snprintf(rt_ps2_path, sizeof rt_ps2_path, "%s", image);
             snprintf(why, sizeof why, "That is Silent Hill 3 for the PlayStation 2: the disc starts %s, which is MIPS "
                                       "code with the console's own data formats.\n\nThis port recompiles the 2003 PC "
                                       "release, so it cannot run it. Install the PC discs and give it the installed "
@@ -830,6 +839,70 @@ void rt_say(const char *text) {
     rt_log("%s", text);
 #ifdef _WIN32
     win_message("Silent Hill 3", text);
+#endif
+}
+
+#ifdef _WIN32
+/* PCSX2, the PlayStation 2 emulator: the usual install folders, then PATH. */
+static int find_pcsx2(char *out, size_t n) {
+    static const char *const exes[] = {"pcsx2-qt.exe", "pcsx2.exe"};
+    static const char *const envs[] = {"LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"};
+    static const char *const subs[] = {"\\Programs\\PCSX2\\", "\\PCSX2\\", "\\PCSX2\\"};
+    char path[700];
+    for (size_t e = 0; e < sizeof envs / sizeof *envs; e++) {
+        const char *root = getenv(envs[e]);
+        if (!root || !*root) continue;
+        for (size_t x = 0; x < sizeof exes / sizeof *exes; x++) {
+            snprintf(path, sizeof path, "%s%s%s", root, subs[e], exes[x]);
+            if (is_file(path)) { snprintf(out, n, "%s", path); return 1; }
+        }
+    }
+    for (size_t x = 0; x < sizeof exes / sizeof *exes; x++)
+        if (SearchPathA(NULL, exes[x], NULL, (DWORD)n, out, NULL)) return 1;
+    return 0;
+}
+
+static int launch_process(const char *exe, const char *arg) {
+    char cmd[1500];
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof si);
+    si.cb = sizeof si;
+    snprintf(cmd, sizeof cmd, "\"%s\" \"%s\"", exe, arg);
+    if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) return 0;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return 1;
+}
+#endif
+
+/* A PlayStation 2 disc or program cannot be run by this port, but PCSX2 can run it. Offer that instead of only
+ * refusing, and answer on screen either way so the caller does not put up a second box. */
+int rt_ps2_offer(const char *disc) {
+#ifdef _WIN32
+    char exe[700], text[1400];
+    if (find_pcsx2(exe, sizeof exe)) {
+        snprintf(text, sizeof text,
+                 "That is Silent Hill 3 for the PlayStation 2 (%s).\n\n"
+                 "sh3-pc recompiles the 2003 PC release, so it cannot run PS2 code. Open it in PCSX2 instead?",
+                 file_name(disc));
+        if (!win_confirm("Silent Hill 3", text)) return 1;
+        if (launch_process(exe, disc)) {
+            rt_log("launcher: opened %s in PCSX2 (%s)", disc, exe);
+            return 1;
+        }
+        win_message("Silent Hill 3", "PCSX2 was found but could not be started.");
+        return 1;
+    }
+    snprintf(text, sizeof text,
+             "That is Silent Hill 3 for the PlayStation 2 (%s).\n\n"
+             "This port recompiles the 2003 PC release, so it cannot run PS2 discs or programs. PCSX2 can: install it "
+             "from pcsx2.net, then pick this disc again and the launcher will open it there.", file_name(disc));
+    win_message("Silent Hill 3", text);
+    return 1;
+#else
+    (void)disc;
+    return 0;
 #endif
 }
 #endif /* !__SWITCH__ */
@@ -919,7 +992,7 @@ int main(int argc, char **argv) {
     if (given) {
         const char *why = rt_game_path(given, dir, sizeof dir);
         if (why) {
-            rt_say(why);
+            if (!rt_last_ps2 || !rt_ps2_offer(rt_ps2_path)) rt_say(why);
             return 1;
         }
     } else {
@@ -935,7 +1008,7 @@ int main(int argc, char **argv) {
             const char *why;
             if (!rt_pick_game_folder(start, picked, sizeof picked)) break;
             if (!(why = rt_game_path(picked, dir, sizeof dir))) break;
-            rt_say(why);
+            if (!rt_last_ps2 || !rt_ps2_offer(rt_ps2_path)) rt_say(why);
             dir[0] = 0;
         }
 #endif

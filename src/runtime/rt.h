@@ -70,6 +70,11 @@ int rt_pick_game_folder(const char *start, char *out, size_t n);
 int rt_pick_game_disc(const char *start, char *out, size_t n);
 int rt_pick_mod_zip(char *out, size_t n);
 #endif
+/* A PlayStation 2 disc or program that rt_game_path refused: rt_ps2_offer explains that this port cannot run it
+ * and, on Windows, offers to open it in PCSX2. 1 when the player was answered on screen. */
+extern int rt_last_ps2;
+extern char rt_ps2_path[700];
+int rt_ps2_offer(const char *disc);
 extern int rt_hd_textures;            /* hd= in sh3.ini: mods' texture packs replace the game's textures */
 extern int rt_aniso;                  /* aniso= in sh3.ini: anisotropic filtering, 1 = off */
 uint32_t galloc(uint32_t size);      /* guest heap, 16-byte aligned, zeroed */

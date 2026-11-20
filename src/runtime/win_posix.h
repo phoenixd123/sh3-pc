@@ -105,5 +105,7 @@ static inline struct tm *localtime_r(const time_t *t, struct tm *out) { return l
 int win_pick_path(const char *title, const char *start, char *out, size_t n);
 int win_pick_file(const char *title, const char *start, const char *filter, char *out, size_t n);
 void win_message(const char *title, const char *text);
+/* Yes starts `disc` in PCSX2; No changes nothing. */
+int win_confirm(const char *title, const char *text);
 
 #endif /* _WIN32 */

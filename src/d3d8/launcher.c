@@ -590,7 +590,11 @@ static void options(void) {
             int got = sel == ROW_FOLDER ? rt_pick_game_folder(rt_game_dir, picked, sizeof picked)
                                         : rt_pick_game_disc(rt_game_dir, picked, sizeof picked);
             const char *why = got ? rt_game_path(picked, dir, sizeof dir) : NULL;
-            if (got && why) rt_say(why);
+            if (got && why) {
+                /* A PS2 disc cannot run here: rt_ps2_offer explains and offers PCSX2 instead. */
+                if (!rt_last_ps2 || !rt_ps2_offer(rt_ps2_path)) rt_say(why);
+                else row_note = "PlayStation 2 disc: opens in PCSX2";
+            }
             else if (got) {
                 ini_save();  /* what was changed here belongs to the folder the port is leaving */
                 if (rt_set_game_dir(dir)) {

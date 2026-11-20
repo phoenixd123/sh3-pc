@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0 - the PS2 disc, handed to PCSX2
+
+- **A PS2 disc is no longer a dead end.** Picking one - in Options, by dropping it on the executable, or on the
+  command line - still says that this port recompiles the 2003 PC release and cannot run MIPS code, but when
+  PCSX2 is installed the same dialog offers to open the disc in it. A `.cue` hands over the `.bin` it names.
+- **PCSX2 is found where it installs** (`%LOCALAPPDATA%\Programs\PCSX2`, `%ProgramFiles%\PCSX2`, then PATH) and
+  started with the image as its argument. Without PCSX2 the dialog says where to get it, and nothing else changes.
+
 ## 1.4.0 - freecam
 
 - **F1 detaches the camera and holds the game's clock.** The game keeps drawing, so the view moves smoothly

@@ -200,3 +200,7 @@ int win_pick_file(const char *title, const char *start, const char *filter, char
 }
 
 void win_message(const char *title, const char *text) { MessageBoxA(NULL, text, title, MB_OK | MB_ICONINFORMATION); }
+
+int win_confirm(const char *title, const char *text) {
+    return MessageBoxA(NULL, text, title, MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES;
+}

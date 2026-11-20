@@ -8,7 +8,7 @@
 </div>
 <h1 align=center>Silent Hill 3 — PC (and Switch)</h1>
 
-<p align=center><b>1.4.0</b> — ported to PC by <b>phoenixd123</b></p>
+<p align=center><b>1.5.0</b> — ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
@@ -60,7 +60,7 @@ a render of what the port might look like.
    argument or `SH3_DIR` answers the question up front, and so does dropping the port's executable into the game
    folder. The path can be the folder, the game's own `sh3.exe`, or a disc: a file dropped on the port is read far
    enough to say what it is, so a PlayStation 2 image and a PC installation disc each come back named, with what to
-   do instead.
+   do instead; a PS2 image is offered to PCSX2 when the emulator is installed.
 4. **Mods are optional**: a `mods/` folder beside the game, with HD texture packs in it ([MODDING.md](MODDING.md)).
 5. **Screenshots**: **F12** in game writes `screenshots/sh3-<date>-<time>.png`.
 
@@ -89,7 +89,8 @@ different executable will crash, not run.
 **The PlayStation 2 release cannot be used.** It is a MIPS binary with its own data formats and no Win32 layer to
 reimplement; this port is a recompilation of the PC build, and doing the PS2 version would be a different project
 from the ground up. Point the launcher at a PS2 image and it says exactly that, naming the program the disc boots
-(`SLUS_206.22` on the NTSC disc), instead of failing silently.
+(`SLUS_206.22` on the NTSC disc), instead of failing silently. If PCSX2 is installed, the same dialog offers to
+open the image there, which is how the PS2 release is played on a PC; a `.cue` hands over the `.bin` it names.
 
 ## Features
 
