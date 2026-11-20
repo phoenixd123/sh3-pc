@@ -744,7 +744,10 @@ static int cue_image(const char *cue, char *out, size_t n) {
             if (!(e = strrchr(++p, '"'))) continue;
         } else if (!(e = strrchr(p, ' '))) continue;  /* FILE name BINARY */
         *e = 0;
-        snprintf(out, n, "%.*s%s", (int)(file_name(cue) - cue), cue, p);
+        if (*p == '/' || *p == '\\' || (p[0] && p[1] == ':'))
+            snprintf(out, n, "%s", p);  /* a cue with an absolute path is used as it is */
+        else
+            snprintf(out, n, "%.*s%s", (int)(file_name(cue) - cue), cue, p);
         ok = is_file(out);
     }
     if (f) fclose(f);
@@ -806,7 +809,13 @@ const char *rt_game_path(const char *given, char *dir, size_t n) {
     snprintf(image, sizeof image, "%s", given);
     {
         const char *dot = strrchr(given, '.');
-        if (dot && !strcasecmp(dot + 1, "cue")) cue_image(given, image, sizeof image);  /* the .bin beside it */
+        if (dot && !strcasecmp(dot + 1, "cue") && !cue_image(given, image, sizeof image)) {
+            snprintf(why, sizeof why,
+                     "The cue sheet\n\n%s\n\nnames a disc image that is not there. Keep the .bin and the .cue in "
+                     "the same folder, with the .cue's FILE line matching the .bin's name; or give the port the .bin "
+                     "itself.", given);
+            return why;
+        }
     }
     if (disc_open(&d, image)) {
         int ps2 = disc_boot(&d, boot, sizeof boot);

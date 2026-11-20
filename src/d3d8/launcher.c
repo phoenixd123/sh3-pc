@@ -568,7 +568,7 @@ static void draw_options(int sel) {
             continue;
         }
         if (i == ROW_IMPORT) {
-            text(140, y, 36, c, "Import the game download");
+            text(140, y, 36, c, "Import a .zip download");
             continue;
         }
         if (i == ROW_MOD) {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.2 - cue sheets
+
+- **A .cue with an absolute FILE path now works.** It used to have the cue's folder glued in front of the path,
+  so the image was never found; the absolute path is used as it is.
+- **A .cue whose .bin is missing says so**, naming the cue and the FILE line to check, instead of "that file is
+  not part of Silent Hill 3". Both files have to be in the same folder.
+- The Options row is now **Import a .zip download**: a disc image (.bin/.cue/.iso) goes through **Game disc or
+  file**, where it is read and either handed to PCSX2 (PS2) or named as an installation disc (PC).
+
 ## 1.6.1 - Play hands over to the copy's own game
 
 - **The launcher-only build can start the imported download.** Play used to say only that the recompiled code
