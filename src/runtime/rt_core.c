@@ -47,7 +47,8 @@ char rt_game_dir[512] = ".";
 int rt_shot_request;  /* F12 (user32.c rt_pump_events) asked for a screenshot at the next frame */
 int rt_hd_textures = 1;  /* hd=0 in sh3.ini turns mod texture packs off */
 int rt_aniso = 8;        /* aniso=1 in sh3.ini turns anisotropic filtering off */
-int rt_ws = 1;           /* widescreen=0 in sh3.ini keeps the 4:3 framing */
+int rt_ws = 1;char rt_nexus_key[128];   /* nexus_key= in sh3.ini: the player's own Nexus API key */
+           /* widescreen=0 in sh3.ini keeps the 4:3 framing */
 int rt_filter;           /* filter=1 CRT, 2 VHS in sh3.ini; 0 (the default) blits as before */
 
 /* log=1 in sh3.ini also writes sh3.log next to the game. On the Switch it is off unless asked for (launched
@@ -509,6 +510,10 @@ static void read_ini(void) {
         if (sscanf(line, " widescreen = %u", &a) == 1) rt_ws = a != 0;
         if (sscanf(line, " filter = %u", &a) == 1) rt_filter = a > 2 ? 2 : a;
         if (sscanf(line, " log = %u", &a) == 1) log_on = a;
+        if (sscanf(line, " nexus_key = %127[^\r\n]", rt_nexus_key) == 1) {
+            size_t k = strlen(rt_nexus_key);
+            while (k && (rt_nexus_key[k - 1] == ' ' || rt_nexus_key[k - 1] == '\t')) rt_nexus_key[--k] = 0;
+        }
     }
     if (ini) fclose(ini);
     host_use_single_core(cores >= 3 ? -1 : 0);

@@ -8,7 +8,7 @@
 </div>
 <h1 align=center>Silent Hill 3 — PC (and Switch)</h1>
 
-<p align=center><b>1.8.0</b> — ported to PC by <b>phoenixd123</b></p>
+<p align=center><b>1.9.0</b> — ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
@@ -306,6 +306,31 @@ The port keeps one file of its own beside its executable: `sh3-pc.ini`, holding 
 was pointed at. **Options > Game folder** picks it again with the Windows folder dialog, starting where it is now,
 and **Options > Game disc or file** takes the game's own `sh3.exe` or a disc image through the open-file dialog;
 anything that is not the game is refused with the same words the command line uses, and nothing is written. In game, **F12** writes `screenshots/sh3-<date>-<time>.png` next to `sh3.exe`.
+
+### Mods
+
+The launcher has a Mods screen: **Mods** in its menu, or press **M** anywhere in it. The left column is what is
+installed from `mods/`; the right column is the Nexus Mods list for Silent Hill 3, straight from the official
+API (`api.nexusmods.com`) - nothing is scraped, which the site's terms forbid.
+
+To see the list, put your own personal API key (nexusmods.com, **API Access**) into `sh3.ini`:
+
+```ini
+nexus_key=your-key-here
+```
+
+The key stays on your machine; it is not part of the repository, and `SH3_NEXUS_KEY` in the environment does the
+same thing for a test run.
+
+- **A** downloads the selected mod's main file and installs it into `mods/`, in the background, with progress on
+  the screen. This uses the API's download endpoint, which Nexus only allows for **Premium** accounts: a free key
+  can list mods but gets 403 for the file. When that happens the launcher says so and offers the page instead.
+- **N** opens the selected mod's page, which is the way to download it without Premium: download the file there,
+  then drop the `.zip` on the launcher window and it is installed into `mods/` like any other mod.
+- **R** asks Nexus for the list again, **B** goes back. A `.zip` dropped on the window works from any screen.
+
+The same installer as before handles both routes: a zip is unpacked into `mods/<name>/`, its shape is worked out
+(`files/`, or `mod.ini` as it stands), and the game picks it up on the next start.
 
 ## Building
 

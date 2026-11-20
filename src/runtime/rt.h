@@ -99,6 +99,7 @@ extern int rt_hd_textures;            /* hd= in sh3.ini: mods' texture packs rep
 extern int rt_aniso;                  /* aniso= in sh3.ini: anisotropic filtering, 1 = off */
 extern int rt_ws;                     /* widescreen=0 in sh3.ini: the 4:3 framing, no ThirteenAG fix */
 extern int rt_filter;                 /* filter= in sh3.ini: 0 off, 1 CRT, 2 VHS */
+extern char rt_nexus_key[128];       /* nexus_key= in sh3.ini: the Nexus Mods API key */
 uint32_t galloc(uint32_t size);      /* guest heap, 16-byte aligned, zeroed */
 void gfree(uint32_t va);
 uint32_t grealloc(uint32_t va, uint32_t size);

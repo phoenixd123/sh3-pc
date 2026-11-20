@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.9.0 - the Mods screen and Nexus Mods
+
+- **Mods screen** (menu entry, or **M** anywhere in the launcher): installed mods on the left, the Nexus Mods list
+  for Silent Hill 3 on the right. A downloads the selected mod's main file and installs it into `mods/` in the
+  background; N opens the mod's page; R refreshes; B goes back.
+- **Nexus API, not scraping**: the list and the download come from `api.nexusmods.com` with the player's own
+  `nexus_key=` from sh3.ini. Automatic downloads are Premium-only in the API, so a free key is told that plainly
+  and pointed at the page instead of being worked around.
+- New files `src/d3d8/nexus.c|h` (WinHTTP + a small JSON reader), linked against `winhttp`.
+- Tested against a local stand-in for the API: the list shows, a Premium account downloads and installs a mod
+  into `mods/` with its `files/` layout intact, and a free account is refused with the Premium message and no
+  files written. Not tested against the live API (no account here).
+
 ## 1.8.0 - Steam Deck (Proton)
 
 - **Import without `tar.exe`.** A Proton prefix has no `tar.exe`, so Import (and mod zips) failed on the Deck.

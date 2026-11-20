@@ -5,6 +5,7 @@
 #include "d3d8.h"
 #include "../mods/mods.h"  /* mods_init: Options > Game folder re-reads mods/ */
 #include "../runtime/win_posix.h"  /* win_confirm: Check this copy asks before it switches folders */
+#include "nexus.h"  /* the Mods screen: the Nexus list and its downloads */
 #include <SDL2/SDL.h>
 #include <math.h>
 
@@ -296,7 +297,7 @@ static void ini_save(void) {
 
 /* ---- input ---- */
 
-enum { IN_NONE, IN_UP, IN_DOWN, IN_LEFT, IN_RIGHT, IN_OK, IN_BACK, IN_DROP };
+enum { IN_NONE, IN_UP, IN_DOWN, IN_LEFT, IN_RIGHT, IN_OK, IN_BACK, IN_DROP, IN_MODS, IN_PAGE, IN_REFRESH };
 
 /* Testing: the same SH3_KEYS script the game takes drives the menus too, so Options and its pickers can be
  * walked without a keyboard (SH3_LAUNCHER=1 keeps the launcher up for it). One return per script entry. */
@@ -321,6 +322,9 @@ static int scripted_menu_key(void) {
         else if (!strcasecmp(name, "Right")) code = IN_RIGHT;
         else if (!strcasecmp(name, "Return") || !strcasecmp(name, "Space")) code = IN_OK;
         else if (!strcasecmp(name, "Escape") || !strcasecmp(name, "Backspace")) code = IN_BACK;
+        else if (!strcasecmp(name, "M") || !strcasecmp(name, "Mods")) code = IN_MODS;
+        else if (!strcasecmp(name, "N") || !strcasecmp(name, "Page")) code = IN_PAGE;
+        else if (!strcasecmp(name, "R") || !strcasecmp(name, "Refresh")) code = IN_REFRESH;
         for (int i = 0; i < nfired; i++)
             if (fired[i] == at) seen = 1;
         if (code && !seen && now >= at && now < at + hold) {
@@ -353,6 +357,9 @@ static int poll_input(void) {
             case SDLK_RIGHT: return IN_RIGHT;
             case SDLK_RETURN: case SDLK_SPACE: return IN_OK;
             case SDLK_ESCAPE: case SDLK_BACKSPACE: return IN_BACK;
+            case SDLK_m: return IN_MODS;
+            case SDLK_n: return IN_PAGE;
+            case SDLK_r: return IN_REFRESH;
             }
             break;
         case SDL_CONTROLLERBUTTONDOWN:
@@ -398,7 +405,7 @@ static int poll_input(void) {
 static uint32_t *logo_px;
 static int logo_w, logo_h;
 
-static const char *menu_items[] = {"Play", "Options", "Credits"};
+static const char *menu_items[] = {"Play", "Options", "Mods", "Credits"};
 #define N_ITEMS (int)(sizeof menu_items / sizeof *menu_items)
 
 static void draw_menu(int sel) {
@@ -406,7 +413,7 @@ static void draw_menu(int sel) {
     if (logo_px) image(logo_px, logo_w, logo_h, (CW - 800) / 2, 170, 800, 800 * logo_h / logo_w);
     text_c(320, 32, C_DIM, PORT_NAME);
     for (int i = 0; i < N_ITEMS; i++) text_c(450 + i * 64, 44, i == sel ? C_SEL : C_TEXT, menu_items[i]);
-    text_c(690, 24, C_DIM, "A: select");
+    text_c(684, 22, C_DIM, "A: select    M: mods    B: back");
 }
 
 /* ---- credits ---- */
@@ -829,6 +836,226 @@ static void splash(const uint8_t *img, const uint8_t *end, Uint64 wait_ms, const
     fade(0);
 }
 
+
+/* ---- mods --------------------------------------------------------------------------------------------
+ * Two columns: what is installed from mods/, and the Nexus Mods list for Silent Hill 3. A downloads the
+ * selected mod's main file and installs it; N opens its page (the way to download without Premium); R asks
+ * Nexus for the list again. The key comes from nexus_key= in sh3.ini. */
+#ifdef _WIN32
+static NexusMod nx_mods[NEXUS_MAX_MODS];
+static int nx_count;
+static volatile LONG nx_list_done;      /* the fetch thread finished */
+static char nx_list_err[600];
+static char nx_note[600];
+
+typedef struct {
+    int mod;
+    char zip[700];
+    char err[600];
+    volatile LONG ok;
+} NxJob;
+static NxJob nx_job;
+static volatile LONG nx_job_done;
+
+static DWORD __stdcall nx_list_thread(void *unused) {
+    char err[600] = "";
+    (void)unused;
+    int n = nexus_list(nx_mods, NEXUS_MAX_MODS, err, sizeof err);
+    if (n > 0) nx_count = n;
+    else snprintf(nx_list_err, sizeof nx_list_err, "%s", err);
+    InterlockedExchange(&nx_list_done, 1);
+    return 0;
+}
+
+static DWORD __stdcall nx_dl_thread(void *unused) {
+    char err[600] = "", who[64] = "";
+    (void)unused;
+    int prem = nexus_account(who, sizeof who, err, sizeof err);
+    rt_log("mods: account %d %s", prem, who);
+    if (prem != 1) {
+        if (prem == 0)
+            snprintf(err, sizeof err,
+                     "Automatic downloads need Nexus Premium. Press N to open the mod's page, download the file "
+                     "there, and drop the .zip on this window to install it.");
+        snprintf(nx_job.err, sizeof nx_job.err, "%s", err);
+        rt_log("mods: refused: %s", err);
+        InterlockedExchange(&nx_job_done, 1);
+        return 0;
+    }
+    nx_job.ok = nexus_fetch_main(nx_job.mod, nx_job.zip, err, sizeof err);
+    rt_log("mods: fetch %d -> %d %s", nx_job.mod, nx_job.ok, err);
+    if (!nx_job.ok) snprintf(nx_job.err, sizeof nx_job.err, "%s", err);
+    InterlockedExchange(&nx_job_done, 1);
+    return 0;
+}
+
+/* Long sentences over as many lines as they need. */
+static void wrap_text(int x, int y, int size, uint32_t c, const char *s) {
+    char line[300] = "";
+    size_t ll = 0;
+    int maxw = CW - 2 * x - 20;
+    while (*s) {
+        if (*s == '\n') {
+            if (ll) text(x, y, size, c, line);
+            y += size + 8;
+            line[0] = 0;
+            ll = 0;
+            s++;
+            continue;
+        }
+        const char *w = s;
+        while (*w && *w != ' ' && *w != '\n') w++;
+        char cand[320];
+        snprintf(cand, sizeof cand, "%s%s%.*s", line, ll ? " " : "", (int)(w - s), s);
+        if (text_w(size, cand) > maxw && ll) {
+            text(x, y, size, c, line);
+            y += size + 8;
+            snprintf(line, sizeof line, "%.*s", (int)(w - s), s);
+            ll = strlen(line);
+        } else {
+            snprintf(line, sizeof line, "%s", cand);
+            ll = strlen(line);
+        }
+        s = *w ? w + 1 : w;
+    }
+    if (ll) text(x, y, size, c, line);
+}
+
+static void draw_mods(int sel) {
+    for (int i = 0; i < CW * CH; i++) canvas[i] = C_BG;
+    text_c(24, 34, C_TEXT, "MODS");
+    text_c(76, 17, C_DIM, "installed from mods/");
+    int n = mods_count();
+    if (!n) text(70, 110, 20, C_DIM, "None yet.");
+    for (int i = 0; i < n && i < 14; i++) text(70, 112 + i * 30, 20, C_TEXT, mods_name(i));
+
+    text(660, 76, 17, C_DIM, "nexusmods.com/silenthill3/mods");
+    if (!nexus_have_key()) {
+        wrap_text(660, 110, 18, C_DIM,
+                  "Add your own API key to sh3.ini as nexus_key=... (the API Access page on your Nexus "
+                  "account). Then reopen this screen.");
+    } else if (nx_count == 0 && !nx_list_done) {
+        text(660, 110, 20, C_DIM, "Asking Nexus...");
+    } else if (nx_count == 0) {
+        wrap_text(660, 110, 18, C_DIM, nx_list_err[0] ? nx_list_err : "No mods came back.");
+    } else {
+        int first = 0;
+        if (sel >= 12) first = sel - 11;
+        for (int i = first; i < nx_count && i < first + 12; i++) {
+            char row[220];
+            snprintf(row, sizeof row, "%s%s", i == sel ? "> " : "  ", nx_mods[i].name);
+            text(660, 110 + (i - first) * 30, 20, i == sel ? C_SEL : C_TEXT, row);
+            char by[120];
+            snprintf(by, sizeof by, "%.24s", nx_mods[i].author);
+            text(660 + text_w(20, row) + 14, 113 + (i - first) * 30, 15, C_DIM, by);
+        }
+    }
+    if (nx_job_done && nx_job.err[0]) wrap_text(70, 560, 18, C_DIM, nx_job.err);
+    else if (nx_note[0]) wrap_text(70, 560, 18, C_DIM, nx_note);
+    text_c(668, 22, C_DIM, "A: download and install   N: open the page   R: refresh   B: back");
+    (void)sel;
+}
+
+static void mods_screen(void) {
+    int sel = 0, dirty = 1, last_list = -1;
+    nx_job_done = 0;
+    nx_job.err[0] = 0;
+    nx_note[0] = 0;
+    if (nexus_have_key() && nx_count == 0) {
+        nx_list_done = 0;
+        nx_list_err[0] = 0;
+        CreateThread(NULL, 0, nx_list_thread, NULL, 0, NULL);
+    }
+    fade(1);
+    for (;;) {
+        if (dirty) { draw_mods(sel); dirty = 0; }
+        present(canvas, CW, CH);
+        int in = poll_input();
+        if (in == IN_DROP) {
+            handle_drop(drop_file);
+            mods_init();
+            dirty = 1;
+            continue;
+        }
+        if (nx_list_done != last_list) { last_list = nx_list_done; dirty = 1; }
+        if (nx_job_done) {
+            char name[128] = "", err[600] = "";
+            if (nx_job.ok) {
+                if (mods_install(nx_job.zip, name, sizeof name, err, sizeof err)) {
+                    rt_log("mods: installed %s from %s", name, nx_job.zip);
+                    mods_init();
+                    snprintf(nx_note, sizeof nx_note, "Installed \"%s\". It is in mods/ now.", name);
+                } else
+                    snprintf(nx_note, sizeof nx_note, "%s", err);
+                DeleteFileA(nx_job.zip);
+            } else
+                snprintf(nx_note, sizeof nx_note, "%s", nx_job.err);
+            nx_job_done = 0;
+            dirty = 1;
+        }
+        if (in == IN_NONE) continue;
+        if (in == IN_BACK) break;
+        if (in == IN_REFRESH) {
+            nx_count = 0;
+            nx_list_done = 0;
+            nx_list_err[0] = 0;
+            if (nexus_have_key()) CreateThread(NULL, 0, nx_list_thread, NULL, 0, NULL);
+            dirty = 1;
+            continue;
+        }
+        if (in == IN_PAGE) {
+            if (nx_count) {
+                char url[300];
+                nexus_page_url(nx_mods[sel].id, url, sizeof url);
+                rt_open_url(url);
+                snprintf(nx_note, sizeof nx_note, "Opened the page in your browser: download the file there and "
+                                                  "drop the .zip on this window.");
+            } else
+                snprintf(nx_note, sizeof nx_note, "Open https://www.nexusmods.com/silenthill3/mods in your browser.");
+            dirty = 1;
+            continue;
+        }
+        if (in == IN_DOWN) {
+            if (nx_count) sel = (sel + 1) % nx_count;
+            dirty = 1;
+            continue;
+        }
+        if (in == IN_UP) {
+            if (nx_count) sel = (sel + nx_count - 1) % nx_count;
+            dirty = 1;
+            continue;
+        }
+        if (in == IN_OK && nx_count && sel < nx_count) {
+            char tmp[700], pat[760], safe[128];
+            DWORD n = GetTempPathA(sizeof tmp, tmp);
+            if (!n) { snprintf(nx_note, sizeof nx_note, "Windows did not name a temporary folder."); dirty = 1; continue; }
+            size_t o = 0;
+            for (const char *q = nx_mods[sel].name; *q && o < sizeof safe - 1; q++) {
+                char c = *q;
+                if (strchr("<>:\"/\\|?*", c)) c = '_';
+                safe[o++] = c;
+            }
+            safe[o] = 0;
+            if (!safe[0]) snprintf(safe, sizeof safe, "mod-%d", nx_mods[sel].id);
+            snprintf(nx_job.zip, sizeof nx_job.zip, "%s%s.zip", tmp, safe);
+            nx_job.mod = nx_mods[sel].id;
+            nx_job.ok = 0;
+            nx_job.err[0] = 0;
+            snprintf(pat, sizeof pat, "%s", nx_mods[sel].name);
+            snprintf(nx_note, sizeof nx_note, "Downloading \"%s\"...", pat);
+            nx_job_done = 0;
+            CreateThread(NULL, 0, nx_dl_thread, NULL, 0, NULL);
+            dirty = 1;
+            continue;
+        }
+        if (in == IN_LEFT || in == IN_RIGHT) dirty = 1;
+    }
+    fade(0);
+}
+#else
+static void mods_screen(void) {}
+#endif
+
 void rt_game_setup(void);  /* rt_core.c */
 
 void launcher_run(void) {
@@ -852,6 +1079,9 @@ void launcher_run(void) {
     splash(splash_bmp, splash_bmp_end, 4000, SPLASH_SHA1);
     if (!credits_seen()) credits();  /* first launch: who made this port, once */
     ini_load();
+#ifdef _WIN32
+    nexus_set_key(rt_nexus_key);
+#endif
     draw_menu(0);
     if (getenv("SH3_DROP")) {  /* a scripted drop, for tests */
         handle_drop(getenv("SH3_DROP"));
@@ -865,6 +1095,13 @@ void launcher_run(void) {
         if (in == IN_DROP) {
             handle_drop(drop_file);
             draw_menu(sel);
+            continue;
+        }
+        if (in == IN_MODS) {
+            fade(0);
+            mods_screen();
+            draw_menu(sel);
+            fade(1);
             continue;
         }
         if (in == IN_UP || in == IN_DOWN) sel = (sel + (in == IN_UP ? N_ITEMS - 1 : 1)) % N_ITEMS, dirty = 1, sound(SND_CURSOR);
@@ -892,6 +1129,12 @@ void launcher_run(void) {
             fade(1);
         }
         if (in == IN_OK && sel == 2) {
+            fade(0);
+            mods_screen();
+            draw_menu(sel);
+            fade(1);
+        }
+        if (in == IN_OK && sel == 3) {
             fade(0);
             credits();
             draw_menu(sel);
