@@ -906,6 +906,70 @@ int rt_ps2_offer(const char *disc) {
 #endif
 }
 
+/* ---- starting the copy's own executable ------------------------------------------------------------
+ * The release is the launcher-only build: the recompiled game code belongs to a build made from the player's
+ * own sh3.exe, and no release can contain it. The imported Full-Rip has that sh3.exe in its folder, so the
+ * honest fallback is to ask, then start it there. Nothing is copied or replaced. */
+static int same_path(const char *a, const char *b) {
+    char x[700], y[700];
+    size_t i;
+    snprintf(x, sizeof x, "%s", a);
+    snprintf(y, sizeof y, "%s", b);
+    for (i = 0; x[i]; i++) if (x[i] == '/') x[i] = '\\';
+    for (i = 0; y[i]; i++) if (y[i] == '/') y[i] = '\\';
+    return !strcasecmp(x, y);
+}
+
+int rt_run_original(void) {
+#ifdef _WIN32
+    char exe[700], self[700], text[1200], why[1200];
+    stat_t a, b;
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    if (!rt_game_dir[0]) {
+        rt_say("There is no game folder yet. Import the download or pick the folder that holds sh3.exe and data/.");
+        return 0;
+    }
+    snprintf(exe, sizeof exe, "%s/sh3.exe", rt_game_dir);
+    if (!is_file(exe) || stat(exe, &a) != 0) {
+        snprintf(why, sizeof why, "There is no sh3.exe in\n\n%s", rt_game_dir);
+        rt_say(why);
+        return 0;
+    }
+    if (!GetModuleFileNameA(NULL, self, sizeof self)) self[0] = 0;
+    if (same_path(self, exe)) {
+        rt_say("That sh3.exe is this launcher. Keep the launcher in its own folder: the game's own sh3.exe is what "
+               "it needs beside data/.");
+        return 0;
+    }
+    if (stat(self, &b) == 0 && a.st_size == b.st_size) {
+        rt_say("The sh3.exe in the game folder is a copy of this launcher, not the game's own executable. Put the "
+               "launcher in its own folder and leave the game's sh3.exe where it is.");
+        return 0;
+    }
+    snprintf(text, sizeof text,
+             "This launcher has no recompiled game code, so it cannot start the port.\n\n"
+             "Start the game's own sh3.exe in\n%s instead?", rt_game_dir);
+    if (!win_confirm("Silent Hill 3", text)) return 0;
+    memset(&si, 0, sizeof si);
+    si.cb = sizeof si;
+    snprintf(text, sizeof text, "\"%s\"", exe);
+    if (!CreateProcessA(exe, text, NULL, NULL, FALSE, 0, NULL, rt_game_dir, &si, &pi)) {
+        snprintf(why, sizeof why,
+                 "The game's sh3.exe could not be started (error %lu).\n\nIt may need the compatibility mode the "
+                 "download's notes describe, or the PC Fix.", (unsigned long)GetLastError());
+        rt_say(why);
+        return 0;
+    }
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    rt_log("launcher: started the copy's own %s", exe);
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 /* Whether PCSX2 is installed, so the launcher's note does not promise it when it is not. */
 int rt_pcsx2_found(void) {
 #ifdef _WIN32

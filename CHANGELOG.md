@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.1 - Play hands over to the copy's own game
+
+- **The launcher-only build can start the imported download.** Play used to say only that the recompiled code
+  was missing. It now asks whether to start the copy's own `sh3.exe` in the game folder (the NoCD executable the
+  Full-Rip ships), starts it there and exits; nothing is copied or replaced. A build made from your own copy
+  still runs the port instead.
+- **No accidental self-start.** If the "game" executable is this launcher, or a copy of it, Play says so
+  instead of starting a loop.
+
 ## 1.6.0 - the download, imported
 
 - **Options > Import the game download** takes the Full-Rip zip (a pre-installed copy with `sh3.exe` and

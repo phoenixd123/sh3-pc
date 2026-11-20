@@ -785,10 +785,13 @@ void launcher_run(void) {
         if (in == IN_OK) sound(SND_OK);
         if (in == IN_OK && sel == 0) {
 #ifdef PORT_LAUNCHER_ONLY
-            /* The launcher-only build (build/wcheck.sh, and the release asset) has no recompiled game code:
-             * say that instead of dropping the player into the crash handler. */
-            rt_say("This launcher has no recompiled game code, so it cannot start Silent Hill 3.\n\n"
-                   "Build the port from your own copy (docs/BUILD-WINDOWS.md) and run that sh3.exe.");
+            /* The launcher-only build (build/wcheck.sh, and the release asset) has no recompiled game code. The
+             * copy the player imported has its own sh3.exe, and rt_run_original asks before starting it; the
+             * launcher's work is done once it is running. */
+            if (rt_run_original()) {
+                fade(0);
+                exit(0);  /* the copy's own game is running: this process has nothing left to do */
+            }
             dirty = 1;
             continue;
 #else
