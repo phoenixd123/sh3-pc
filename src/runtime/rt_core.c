@@ -939,6 +939,138 @@ static int same_path(const char *a, const char *b) {
     return !strcasecmp(x, y);
 }
 
+/* ---- the copy's own sh3.exe and Windows' idea of where it is -------------------------------------------
+ * The 2003 game asks the registry where it was installed and refuses to start without an answer ("The game is
+ * not installed properly"). A Full-Rip is a copied install, so those entries do not exist and the game's own
+ * sh3.exe stops on that box. HKCU is what Steam006's fix reads; HKLM\SOFTWARE\WOW6432Node is what the unpatched
+ * game reads, and writing it needs the permission prompt. */
+static const char *const sh3_reg_sub = "SOFTWARE\\WOW6432Node\\KONAMI\\SILENT HILL 3";
+static const char *const sh3_reg_sub32 = "SOFTWARE\\KONAMI\\SILENT HILL 3";
+
+static void reg_write(HKEY root, const char *sub, const char *name, const char *val) {
+    HKEY k;
+    DWORD disp;
+    if (RegCreateKeyExA(root, sub, 0, NULL, 0, KEY_SET_VALUE, NULL, &k, &disp) != ERROR_SUCCESS) return;
+    RegSetValueExA(k, name, 0, REG_SZ, (const BYTE *)val, (DWORD)strlen(val) + 1);
+    RegCloseKey(k);
+}
+
+/* movie, sound, data, save and installdir, as the installer wrote them: the folder with a trailing backslash,
+ * and savedata\ under it. HKCU is harmless when the copy's exe ignores it. */
+static void write_user_registry(const char *dir) {
+    char root[700], save[700];
+    snprintf(root, sizeof root, "%s\\", dir);
+    snprintf(save, sizeof save, "%s\\savedata\\", dir);
+    reg_write(HKEY_CURRENT_USER, "Software\\KONAMI\\SILENT HILL 3", "movie", root);
+    reg_write(HKEY_CURRENT_USER, "Software\\KONAMI\\SILENT HILL 3", "sound", root);
+    reg_write(HKEY_CURRENT_USER, "Software\\KONAMI\\SILENT HILL 3", "data", root);
+    reg_write(HKEY_CURRENT_USER, "Software\\KONAMI\\SILENT HILL 3", "save", save);
+    reg_write(HKEY_CURRENT_USER, "Software\\KONAMI\\SILENT HILL 3", "installdir", root);
+}
+
+static int reg_read(HKEY root, const char *sub, const char *name, char *out, DWORD n) {
+    HKEY k;
+    DWORD type, sz = n;
+    out[0] = 0;
+    if (RegOpenKeyExA(root, sub, 0, KEY_QUERY_VALUE, &k) != ERROR_SUCCESS) return 0;
+    int ok = RegQueryValueExA(k, name, NULL, &type, (BYTE *)out, &sz) == ERROR_SUCCESS && type == REG_SZ;
+    RegCloseKey(k);
+    return ok;
+}
+
+/* Does the entry name this folder? Trailing backslashes and case do not count. */
+static int same_install_dir(const char *a, const char *b) {
+    char x[700], y[700];
+    snprintf(x, sizeof x, "%s", a);
+    snprintf(y, sizeof y, "%s", b);
+    for (size_t i = 0; x[i]; i++) if (x[i] == '/') x[i] = '\\';
+    for (size_t i = 0; y[i]; i++) if (y[i] == '/') y[i] = '\\';
+    for (size_t i = strlen(x); i && (x[i - 1] == '\\' || x[i - 1] == '/');) x[--i] = 0;
+    for (size_t i = strlen(y); i && (y[i - 1] == '\\' || y[i - 1] == '/');) y[--i] = 0;
+    return !strcasecmp(x, y);
+}
+
+static int registry_ready(const char *dir) {
+    char v[700];
+    if (reg_read(HKEY_LOCAL_MACHINE, sh3_reg_sub, "installdir", v, sizeof v) && same_install_dir(v, dir)) return 1;
+    if (reg_read(HKEY_LOCAL_MACHINE, sh3_reg_sub32, "installdir", v, sizeof v) && same_install_dir(v, dir)) return 1;
+    return 0;  /* HKCU is only what a patched exe reads: it does not satisfy the unpatched game */
+}
+
+/* A .reg for both HKLM views, imported by regedit with the permission prompt (one prompt for every value). */
+static int write_machine_registry(const char *dir, char *err, size_t en) {
+    char tmp[700], file[800], root[700], save[700], esc_root[1400], esc_save[1400];
+    DWORD n = GetTempPathA(sizeof tmp, tmp);
+    if (!n || n >= sizeof tmp) {
+        snprintf(err, en, "Windows did not name a temporary folder, so the registry entry was not written.");
+        return 0;
+    }
+    snprintf(file, sizeof file, "%ssh3-registry.reg", tmp);
+    snprintf(root, sizeof root, "%s\\", dir);
+    snprintf(save, sizeof save, "%s\\savedata\\", dir);
+    /* a .reg string doubles every backslash */
+    snprintf(esc_root, sizeof esc_root, "%s", root);
+    snprintf(esc_save, sizeof esc_save, "%s", save);
+    for (int k = 0; k < 2; k++) {
+        char *s = k ? esc_save : esc_root;
+        char out[1400];
+        size_t o = 0;
+        for (size_t i = 0; s[i] && o + 3 < sizeof out; i++) {
+            if (s[i] == '\\') out[o++] = '\\';
+            out[o++] = s[i];
+        }
+        out[o] = 0;
+        if (k) snprintf(esc_save, sizeof esc_save, "%s", out);
+        else snprintf(esc_root, sizeof esc_root, "%s", out);
+    }
+    FILE *f = fopen(file, "wb");
+    if (!f) {
+        snprintf(err, en, "The registry file could not be written to\n\n%s", tmp);
+        return 0;
+    }
+    fprintf(f, "Windows Registry Editor Version 5.00\r\n\r\n");
+    const char *const subs[2] = {"HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\KONAMI\\SILENT HILL 3",
+                                 "HKEY_LOCAL_MACHINE\\SOFTWARE\\KONAMI\\SILENT HILL 3"};
+    for (int s = 0; s < 2; s++) {
+        fprintf(f, "[%s]\r\n@=\"\"\r\n", subs[s]);
+        fprintf(f, "\"movie\"=\"%s\"\r\n\"sound\"=\"%s\"\r\n\"data\"=\"%s\"\r\n", esc_root, esc_root, esc_root);
+        fprintf(f, "\"save\"=\"%s\"\r\n\"installdir\"=\"%s\"\r\n\r\n", esc_save, esc_root);
+    }
+    fclose(f);
+
+    char params[900];
+    snprintf(params, sizeof params, "/s \"%s\"", file);
+    SHELLEXECUTEINFOA si;
+    memset(&si, 0, sizeof si);
+    si.cbSize = sizeof si;
+    si.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI;
+    si.lpVerb = "runas";
+    si.lpFile = "regedit.exe";
+    si.lpParameters = params;
+    si.nShow = SW_HIDE;
+    if (!ShellExecuteExA(&si)) {
+        DWORD e = GetLastError();
+        DeleteFileA(file);
+        if (e == ERROR_CANCELLED)
+            snprintf(err, en, "The permission prompt was declined, so Windows still has no Silent Hill 3 entry.\n\n"
+                              "The game's own sh3.exe will say it is not installed properly; run the launcher as "
+                              "administrator, or import a .reg that names\n\n%s", dir);
+        else
+            snprintf(err, en, "The registry entry could not be written (error %lu).", (unsigned long)e);
+        return 0;
+    }
+    if (si.hProcess) {
+        WaitForSingleObject(si.hProcess, 15000);
+        CloseHandle(si.hProcess);
+    }
+    DeleteFileA(file);
+    if (!registry_ready(dir)) {
+        snprintf(err, en, "Windows still does not name this folder after the registry import:\n\n%s", dir);
+        return 0;
+    }
+    return 1;
+}
+
 int rt_run_original(void) {
 #ifdef _WIN32
     char exe[700], self[700], text[1200], why[1200];
@@ -966,6 +1098,17 @@ int rt_run_original(void) {
         rt_say("The sh3.exe in the game folder is a copy of this launcher, not the game's own executable. Put the "
                "launcher in its own folder and leave the game's sh3.exe where it is.");
         return 0;
+    }
+    write_user_registry(rt_game_dir);
+    if (!registry_ready(rt_game_dir)) {
+        snprintf(text, sizeof text,
+                 "Windows has no Silent Hill 3 entry for this folder, or it points somewhere else. The game's own "
+                 "sh3.exe refuses to start without it (\"The game is not installed properly\").\n\n"
+                 "Write the entry for\n%s\nnow? Windows will ask for permission.", rt_game_dir);
+        if (win_confirm("Silent Hill 3", text)) {
+            char err[700] = "";
+            if (!write_machine_registry(rt_game_dir, err, sizeof err)) rt_say(err);
+        }
     }
     snprintf(text, sizeof text,
              "This launcher has no recompiled game code, so it cannot start the port.\n\n"

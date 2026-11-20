@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.1 - the copy's registry entry
+
+- **"The game is not installed properly".** That box is the game's own: it asks Windows where it was installed
+  and stops when the answer is missing, which is what a copied install (a Full-Rip) has. Play now writes the
+  entry for the folder it is about to start: HKCU directly (what the PC Fix reads) and, with the permission
+  prompt, HKLM for the unpatched game. Declining leaves everything as it was.
+- The keys are the installer's: `movie`, `sound`, `data`, `installdir` as `<folder>\`, `save` as
+  `<folder>\savedata\`.
+
 ## 1.7.0 - switches
 
 - **Widescreen is a toggle.** `widescreen=0` in `sh3.ini`, or **Options > Widescreen**, restores the original
