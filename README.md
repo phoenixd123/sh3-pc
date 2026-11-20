@@ -8,7 +8,7 @@
 </div>
 <h1 align=center>Silent Hill 3 — PC (and Switch)</h1>
 
-<p align=center><b>1.6.4</b> — ported to PC by <b>phoenixd123</b></p>
+<p align=center><b>1.7.0</b> — ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
@@ -109,8 +109,8 @@ which is how the imported download runs without a recompiled build; a full build
 - **Mods in one click**: Options > **Install a mod** takes a `.zip`, unpacks it into `mods/` under the game folder
   and loads it without a restart; dropping the archive on the executable installs it and starts the game. The layout
   is worked out from the archive itself: a `files/` folder, a wrapper folder, or loose `data/...`.
-- **Widescreen**: 16:9 at 1280x720 by default, 1920x1080 for docked play, or the original 4:3
-  (ThirteenAG's WidescreenFix, ported). The camera widens in gameplay, cutscenes keep their framing without the
+- **Widescreen**, with a switch: 16:9 at 1280x720 by default, 1920x1080 for docked play, or the original 4:3
+  (`widescreen=0` in `sh3.ini`, or Options > Widescreen). ThirteenAG's WidescreenFix, ported. The camera widens in gameplay, cutscenes keep their framing without the
   letterbox, and menus and HUD stay in a centered 4:3 area.
 - **Controller**: Nintendo's layout (A confirms, B cancels), remappable in Options > Button Config.
 - **Shader cache**: shaders are compiled once and kept on the SD card, so areas only stutter the first time.
@@ -298,6 +298,8 @@ pushed far from it can leave geometry out, and the near and far planes stay the 
 | `trace=1` | with `log=1`, log every Windows call the game makes (very slow) |
 | `hd=1` | read HD texture packs from `mods/` (the default); `hd=0` uses the game's own textures |
 | `aniso=8` | anisotropic filtering, 1-16 (default 8, `1` = off) |
+| `widescreen=1` | the 16:9 framing (default); `0` restores the original 4:3 camera, menus and cutscene borders |
+| `filter=0` | a look over the whole frame: `0` off, `1` CRT (scanlines, warm tube, darker corners), `2` VHS (colour bleed, grain, slow roll) |
 | `texdump=1` | write every texture the game uploads to `texdump/`, for making a pack |
 
 The port keeps one file of its own beside its executable: `sh3-pc.ini`, holding `game=`, the folder the launcher
@@ -329,6 +331,26 @@ build/linux/sh3 game
 
 On Windows the same CMake build works with MSYS2's mingw-w64 toolchain and SDL2; the details, and what the
 Windows layer does differently, are in [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md).
+
+### Steam Deck
+
+The Deck runs the Linux build. SteamOS is Arch-based and its root is read-only, so build in a `distrobox` (or any
+Arch container) with the same steps as above, or install the packages to your home:
+
+```sh
+sudo pacman -S --needed base-devel cmake ninja python python-pip sdl2 libgl
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
+ln -s "/home/deck/games/Silent Hill 3" game
+tools/regen.sh                                  # recompiles your sh3.exe (~5 min)
+cmake -S . -B build/linux -G Ninja && cmake --build build/linux
+build/linux/sh3 game
+```
+
+Then add `build/linux/sh3` to Steam as a non-Steam game with the game folder as its argument, and set the
+compatibility tool to none (it is a native Linux program). The Deck's GPU has the OpenGL 4.3 the port asks for.
+The release zip is the **Windows launcher only**: it has no recompiled game code, so a Deck has to build from its
+own copy, exactly as a Windows source build does. Nothing here has been tried on a Deck; the Linux build is the
+one this repository is developed against.
 
 To make a mod, see [MODDING.md](MODDING.md).
 

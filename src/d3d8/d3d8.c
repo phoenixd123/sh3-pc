@@ -1,6 +1,7 @@
 /* IDirect3D8 and IDirect3DDevice8 on OpenGL. */
 #include "d3d8.h"
 #include "freecam.h"
+#include "filter.h"  /* filter= in sh3.ini: CRT or VHS over the presented frame */
 #include "../mods/mods.h"
 #include <math.h>
 #include <time.h>
@@ -352,7 +353,10 @@ METHOD(dev_Present, 5) {
     /* Keep the game's aspect ratio inside the window; rows flip because the window's row 0 is its bottom. */
     float s = fminf((float)ww / bb->w, (float)wh / bb->h);
     int dw = bb->w * s, dh = bb->h * s, dx = (ww - dw) / 2, dy = (wh - dh) / 2;
-    glBlitFramebuffer(0, 0, bb->w, bb->h, dx, dy + dh, dx + dw, dy, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    if (rt_filter)
+        filter_draw(bb->tex, dx, dy, dw, dh, rt_filter, (float)SDL_GetTicks64() / 1000.0f);
+    else
+        glBlitFramebuffer(0, 0, bb->w, bb->h, dx, dy + dh, dx + dw, dy, GL_COLOR_BUFFER_BIT, GL_LINEAR);
     res_snapshot_front();
     if (rt_shot_request) { rt_shot_request = 0; screenshot(bb); }
     static int frame;

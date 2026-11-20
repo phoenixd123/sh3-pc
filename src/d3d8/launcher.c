@@ -216,6 +216,8 @@ typedef struct {
 static Opt opts[] = {
     {"Resolution", "resolution", {"1280x720", "1920x1080", "960x720", "640x480"}, {"720p", "1080p", "4:3 (960x720)", "4:3 (640x480)"}},
     {"Game threads", "cores", {"3", "1"}, {"Three cores", "One core"}},
+    {"Widescreen", "widescreen", {"1", "0"}, {"On", "Off"}},
+    {"Filter", "filter", {"0", "1", "2"}, {"Off", "CRT", "VHS"}},
 };
 #define N_OPTS (int)(sizeof opts / sizeof *opts)
 

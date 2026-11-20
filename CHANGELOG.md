@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.0 - switches
+
+- **Widescreen is a toggle.** `widescreen=0` in `sh3.ini`, or **Options > Widescreen**, restores the original
+  4:3 camera, the centered menus and the cutscene borders; `1` (the default) is ThirteenAG's fix.
+- **Filters**, for the look of it: `filter=1` draws the frame through a CRT pass (scanlines, a warm tube, darker
+  corners) and `filter=2` through a VHS pass (colour bleed, grain, a slow roll). **Options > Filter** sets it; the
+  default is off, and a shader that fails to build leaves the plain blit alone.
+- **Steam Deck notes** in the README: the Linux build is the one to use, and the release has no game code.
+
 ## 1.6.4 - Check this copy, and drops
 
 - **Options > Check this copy** names what you picked and what to do with it: an installed copy (it offers to use

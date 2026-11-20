@@ -46,6 +46,8 @@ char rt_game_dir[512] = ".";
 int rt_shot_request;  /* F12 (user32.c rt_pump_events) asked for a screenshot at the next frame */
 int rt_hd_textures = 1;  /* hd=0 in sh3.ini turns mod texture packs off */
 int rt_aniso = 8;        /* aniso=1 in sh3.ini turns anisotropic filtering off */
+int rt_ws = 1;           /* widescreen=0 in sh3.ini keeps the 4:3 framing */
+int rt_filter;           /* filter=1 CRT, 2 VHS in sh3.ini; 0 (the default) blits as before */
 
 /* log=1 in sh3.ini also writes sh3.log next to the game. On the Switch it is off unless asked for (launched
  * by nxlink, or log=1): writing it costs an SD card write per line. On PC the console always gets the output,
@@ -503,6 +505,8 @@ static void read_ini(void) {
         if (sscanf(line, " trace = %u", &a) == 1) rt_trace = a;
         if (sscanf(line, " hd = %u", &a) == 1) rt_hd_textures = a != 0;
         if (sscanf(line, " aniso = %u", &a) == 1) rt_aniso = a > 16 ? 16 : a < 1 ? 1 : a;
+        if (sscanf(line, " widescreen = %u", &a) == 1) rt_ws = a != 0;
+        if (sscanf(line, " filter = %u", &a) == 1) rt_filter = a > 2 ? 2 : a;
         if (sscanf(line, " log = %u", &a) == 1) log_on = a;
     }
     if (ini) fclose(ini);

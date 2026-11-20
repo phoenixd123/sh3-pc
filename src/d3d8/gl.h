@@ -63,6 +63,7 @@
     X(PFNGLGETPROGRAMIVPROC, glGetProgramiv) \
     X(PFNGLGETPROGRAMINFOLOGPROC, glGetProgramInfoLog) \
     X(PFNGLUSEPROGRAMPROC, glUseProgram) \
+    X(PFNGLDELETEPROGRAMPROC, glDeleteProgram) \
     X(PFNGLDELETESHADERPROC, glDeleteShader) \
     X(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation) \
     X(PFNGLUNIFORM1IPROC, glUniform1i) \
@@ -154,6 +155,7 @@ GL_FUNCS(GL_DECLARE)
 #define glGetProgramiv p_glGetProgramiv
 #define glGetProgramInfoLog p_glGetProgramInfoLog
 #define glUseProgram p_glUseProgram
+#define glDeleteProgram p_glDeleteProgram
 #define glDeleteShader p_glDeleteShader
 #define glGetUniformLocation p_glGetUniformLocation
 #define glUniform1i p_glUniform1i

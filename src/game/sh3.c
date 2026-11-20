@@ -36,7 +36,7 @@ void sub_00416B70(void) { ARG(0) = rt_res_w; ARG(1) = rt_res_h; sub_00416B70_gen
  * widens the view (hor+); a cutscene (0x81FAB5) keeps its 4:3 width and loses some height instead. The
  * picked-up item and the mouse cursor (calls returning to 0x599C29, 0x4DDB98) keep the 4:3 width. */
 #define ST0 g_fp_stack[g_fp_top & 7]
-static double ws_aspect(void) { return (double)rt_res_w / rt_res_h; }
+static double ws_aspect(void) { return rt_ws ? (double)rt_res_w / rt_res_h : 4.0 / 3.0; }
 static double ws_fov(void) { return (4.0 / 3.0) / ws_aspect(); }  /* 1 at 4:3 */
 extern void sub_0043AB80_gen(void);
 void sub_0043AB80(void) {
