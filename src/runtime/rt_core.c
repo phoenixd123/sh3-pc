@@ -936,7 +936,8 @@ int rt_run_original(void) {
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
     if (!rt_game_dir[0]) {
-        rt_say("There is no game folder yet. Import the download or pick the folder that holds sh3.exe and data/.");
+        rt_say("There is no game folder yet.\n\nIn Options, use Import a .zip download for the Full-Rip archive, "
+               "or Game folder for a folder that already holds sh3.exe and data/.");
         return 0;
     }
     snprintf(exe, sizeof exe, "%s/sh3.exe", rt_game_dir);
@@ -1246,6 +1247,7 @@ int main(int argc, char **argv) {
         if (!dir[0] && game_folder(".")) snprintf(dir, sizeof dir, ".");
         if (!dir[0]) saved_game(start, sizeof start);  /* where the picker opens: the folder it used last */
 #ifdef _WIN32
+#ifndef PORT_LAUNCHER_ONLY
         /* First launch: the shell's picker, until it names something that is the game or is closed. */
         while (!dir[0]) {
             char picked[700];
@@ -1255,13 +1257,23 @@ int main(int argc, char **argv) {
             if (!rt_last_ps2 || !rt_ps2_offer(rt_ps2_path)) rt_say(why);
             dir[0] = 0;
         }
+#endif /* PORT_LAUNCHER_ONLY */
 #endif
     }
 #endif
     if (!dir[0]) {
+#ifdef PORT_LAUNCHER_ONLY
+        /* The launcher is this program's face: open it with no game, so Options can import the download, pick the
+         * folder or read a disc, instead of a console that only says sh3.exe is missing. */
+        rt_log("no game folder yet: opening the launcher");
+        rt_game_dir[0] = 0;  /* "." is only a default; the launcher must know it has no game */
+        launcher_run();
+        return 0;
+#else
         rt_log("no game folder: pass the Silent Hill 3 folder as the first argument, set SH3_DIR, or put the "
                "port's executable in the game folder (sh3.exe and data/ beside it)");
         return 1;
+#endif
     }
     char full[700];
     const char *root = absolute_dir(dir, full, sizeof full);
@@ -1285,3 +1297,16 @@ int main(int argc, char **argv) {
     host_thread_start(game_thread, NULL, 16u << 20);
     for (;;) sleep(1000);
 }
+
+#if defined(_WIN32) && defined(PORT_GUI)
+#include <windows.h>  /* WINAPI and the entry point's types */
+/* The release is linked as a Windows program (-mwindows), so there is no console behind the launcher. mingw's
+ * entry point calls this; it hands the command line to the same main the console builds use. */
+int __stdcall WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show) {
+    (void)inst;
+    (void)prev;
+    (void)cmd;
+    (void)show;
+    return main(__argc, __argv);
+}
+#endif

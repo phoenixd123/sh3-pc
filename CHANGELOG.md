@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.3 - the launcher opens without a game
+
+- **No more blank console.** The release is linked as a Windows program, so double-clicking it no longer opens a
+  command prompt behind the launcher.
+- **The launcher shows itself even with no game installed.** It used to ask for a folder first and exit when it
+  could not find `sh3.exe`; now it opens the menu, and **Options** holds Import a .zip download, Game folder,
+  Game disc or file and Mods.
+- Play with no game folder says so and points at Options.
+
 ## 1.6.2 - cue sheets
 
 - **A .cue with an absolute FILE path now works.** It used to have the cue's folder glued in front of the path,
