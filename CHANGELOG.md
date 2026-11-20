@@ -7,6 +7,8 @@
   PCSX2 is installed the same dialog offers to open the disc in it. A `.cue` hands over the `.bin` it names.
 - **PCSX2 is found where it installs** (`%LOCALAPPDATA%\Programs\PCSX2`, `%ProgramFiles%\PCSX2`, then PATH) and
   started with the image as its argument. Without PCSX2 the dialog says where to get it, and nothing else changes.
+- **The note under the Options row tells the truth.** It says "Opened in PCSX2" only when the emulator actually
+  started, and otherwise says either that the disc was not opened or that PCSX2 is not installed.
 
 ## 1.4.0 - freecam
 

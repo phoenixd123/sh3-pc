@@ -74,7 +74,8 @@ int rt_pick_mod_zip(char *out, size_t n);
  * and, on Windows, offers to open it in PCSX2. 1 when the player was answered on screen. */
 extern int rt_last_ps2;
 extern char rt_ps2_path[700];
-int rt_ps2_offer(const char *disc);
+int rt_ps2_offer(const char *disc);   /* 2 = PCSX2 started, 1 = explained on screen, 0 = no screen */
+int rt_pcsx2_found(void);
 extern int rt_hd_textures;            /* hd= in sh3.ini: mods' texture packs replace the game's textures */
 extern int rt_aniso;                  /* aniso= in sh3.ini: anisotropic filtering, 1 = off */
 uint32_t galloc(uint32_t size);      /* guest heap, 16-byte aligned, zeroed */

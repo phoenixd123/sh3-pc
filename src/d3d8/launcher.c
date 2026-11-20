@@ -293,6 +293,40 @@ static void ini_save(void) {
 
 enum { IN_NONE, IN_UP, IN_DOWN, IN_LEFT, IN_RIGHT, IN_OK, IN_BACK };
 
+/* Testing: the same SH3_KEYS script the game takes drives the menus too, so Options and its pickers can be
+ * walked without a keyboard (SH3_LAUNCHER=1 keeps the launcher up for it). One return per script entry. */
+static int scripted_menu_key(void) {
+    static Uint64 t0;
+    static double fired[64];
+    static int nfired;
+    const char *k = getenv("SH3_KEYS");
+    if (!k) return IN_NONE;
+    if (!t0) t0 = SDL_GetTicks64();
+    double now = (SDL_GetTicks64() - t0) / 1000.0;
+    while (*k && nfired < (int)(sizeof fired / sizeof *fired)) {
+        char name[32] = "";
+        double at = 0, hold = 0.15;
+        int n = 0, code = IN_NONE, seen = 0;
+        if (sscanf(k, "%lf:%31[^,+]%n", &at, name, &n) < 2) break;
+        k += n;
+        if (*k == '+' && sscanf(k, "+%lf%n", &hold, &n) == 1) k += n;
+        if (!strcasecmp(name, "Up")) code = IN_UP;
+        else if (!strcasecmp(name, "Down")) code = IN_DOWN;
+        else if (!strcasecmp(name, "Left")) code = IN_LEFT;
+        else if (!strcasecmp(name, "Right")) code = IN_RIGHT;
+        else if (!strcasecmp(name, "Return") || !strcasecmp(name, "Space")) code = IN_OK;
+        else if (!strcasecmp(name, "Escape") || !strcasecmp(name, "Backspace")) code = IN_BACK;
+        for (int i = 0; i < nfired; i++)
+            if (fired[i] == at) seen = 1;
+        if (code && !seen && now >= at && now < at + hold) {
+            fired[nfired++] = at;
+            return code;
+        }
+        if (*k == ',') k++;
+    }
+    return IN_NONE;
+}
+
 static int poll_input(void) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
@@ -336,7 +370,7 @@ static int poll_input(void) {
         }
         }
     }
-    return IN_NONE;
+    return scripted_menu_key();
 }
 
 /* ---- screens ---- */
@@ -591,9 +625,14 @@ static void options(void) {
                                         : rt_pick_game_disc(rt_game_dir, picked, sizeof picked);
             const char *why = got ? rt_game_path(picked, dir, sizeof dir) : NULL;
             if (got && why) {
-                /* A PS2 disc cannot run here: rt_ps2_offer explains and offers PCSX2 instead. */
-                if (!rt_last_ps2 || !rt_ps2_offer(rt_ps2_path)) rt_say(why);
-                else row_note = "PlayStation 2 disc: opens in PCSX2";
+                /* A PS2 disc cannot run here: rt_ps2_offer explains and offers PCSX2 instead. The note says what
+                 * actually happened, so it never promises an emulator that is not installed. */
+                int r = rt_last_ps2 ? rt_ps2_offer(rt_ps2_path) : 0;
+                if (!r) rt_say(why);
+                else if (r == 2) row_note = "Opened in PCSX2";
+                else row_note = rt_pcsx2_found() ? "PlayStation 2 disc: not opened"
+                                                 : "PlayStation 2 disc: PCSX2 is not installed";
+                if (row_note) rt_log("launcher: %s", row_note);
             }
             else if (got) {
                 ini_save();  /* what was changed here belongs to the folder the port is leaving */

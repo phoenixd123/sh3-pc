@@ -889,7 +889,7 @@ int rt_ps2_offer(const char *disc) {
         if (!win_confirm("Silent Hill 3", text)) return 1;
         if (launch_process(exe, disc)) {
             rt_log("launcher: opened %s in PCSX2 (%s)", disc, exe);
-            return 1;
+            return 2;
         }
         win_message("Silent Hill 3", "PCSX2 was found but could not be started.");
         return 1;
@@ -902,6 +902,16 @@ int rt_ps2_offer(const char *disc) {
     return 1;
 #else
     (void)disc;
+    return 0;
+#endif
+}
+
+/* Whether PCSX2 is installed, so the launcher's note does not promise it when it is not. */
+int rt_pcsx2_found(void) {
+#ifdef _WIN32
+    char exe[700];
+    return find_pcsx2(exe, sizeof exe);
+#else
     return 0;
 #endif
 }
@@ -941,7 +951,16 @@ int rt_set_game_dir(const char *dir) {
 }
 
 #ifdef _WIN32
+/* Testing: SH3_PICK answers both pickers without a dialog, so a scripted run (SH3_KEYS) can walk Options. */
+static int test_pick(char *out, size_t n) {
+    const char *answer = getenv("SH3_PICK");
+    if (!answer || !*answer) return 0;
+    snprintf(out, n, "%s", answer);
+    return 1;
+}
+
 int rt_pick_game_folder(const char *start, char *out, size_t n) {
+    if (test_pick(out, n)) return 1;
     return win_pick_path("Where is Silent Hill 3? Pick the folder that holds sh3.exe and data/", start, out, n);
 }
 
@@ -949,6 +968,7 @@ int rt_pick_game_folder(const char *start, char *out, size_t n) {
 #define MOD_FILTER "Mod archive\0*.zip\0All files\0*.*\0"
 
 int rt_pick_game_disc(const char *start, char *out, size_t n) {
+    if (test_pick(out, n)) return 1;
     return win_pick_file("Where is Silent Hill 3? Pick sh3.exe or the disc", start, GAME_FILTER, out, n);
 }
 
