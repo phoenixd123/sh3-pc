@@ -265,7 +265,9 @@ int nexus_list(NexusMod *out, int max, char *err, size_t errn) {
                             "into `nexus_key=` in sh3.ini.");
         return 0;
     }
-    if (!get_json("/v1/games/silenthill3/mods.json", &m, err, errn)) {
+    /* Nexus retired the v1 "every mod of a game" endpoint (it answers 404 now); latest_added.json is the one
+     * that still lists a game's mods, newest first, with the id, name and author this screen shows. */
+    if (!get_json("/v1/games/silenthill3/mods/latest_added.json", &m, err, errn)) {
         mem_free(&m);
         return 0;
     }
@@ -291,12 +293,34 @@ int nexus_list(NexusMod *out, int max, char *err, size_t errn) {
     return n;
 }
 
-/* The newest MAIN zip in files.json: the file a player would download first. */
+/* The end of the array that starts at or after p: the matching ] , quote-aware. */
+static const char *array_end(const char *p, const char *stop) {
+    int depth = 0, in_str = 0;
+    for (; p < stop; p++) {
+        char c = *p;
+        if (in_str) {
+            if (c == '\\') p++;
+            else if (c == '"') in_str = 0;
+            continue;
+        }
+        if (c == '"') in_str = 1;
+        else if (c == '[') depth++;
+        else if (c == ']' && --depth == 0) return p + 1;
+    }
+    return NULL;
+}
+
+/* The newest MAIN zip in files.json: the file a player would download first. The answer is an object,
+ * {"files":[...],"file_updates":[...]}, so the files array is what has to be walked; reading the first object
+ * in the body only ever saw the first file. */
 static long pick_main_file(const char *json, size_t len, char *name, size_t nn) {
-    const char *p = json, *stop = json + len, *oe;
+    const char *stop = json + len, *oe, *p = NULL, *a = find_sub(json, len, "\"files\"", 7);
     long any_zip = 0;
     char any_name[128] = "";
-    while ((p = obj_next(p, stop, &oe)) != NULL) {
+    const char *aend;
+    while (a && a < stop && *a != '[') a++;
+    if (!a || a >= stop || !(aend = array_end(a, stop))) return 0;
+    while ((p = obj_next(p ? p : a + 1, aend, &oe)) != NULL) {
         size_t ol = (size_t)(oe - p);
         char cat[48] = "", fn[128] = "";
         long id = jint(p, ol, "file_id", 0);

@@ -28,7 +28,7 @@ int nexus_have_key(void);
 /* 1 premium (automatic downloads work), 0 free, -1 could not tell. `who` gets the account name. */
 int nexus_account(char *who, size_t n, char *err, size_t errn);
 
-/* Fills up to max mods, newest first as the API returns them. 1 on success. */
+/* Fills up to max of the game's newest mods, as latest_added.json returns them. 1 on success. */
 int nexus_list(NexusMod *out, int max, char *err, size_t errn);
 
 /* Downloads the mod's main file (the first MAIN .zip) to dest_zip. 1 on success. `progress` is 0..100. */

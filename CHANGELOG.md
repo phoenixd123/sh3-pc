@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.11.1 - the Mods list, against the API as it is now
+
+- **Nexus retired `/v1/games/{game}/mods.json`** and it answers 404, so the Mods screen's right column never
+  loaded. It now asks `latest_added.json`, which still lists a game's mods newest first with the id, name and
+  author the screen shows (ten of them for Silent Hill 3).
+- **A mod's files are read from the `files` array.** `files.json` answers `{"files":[...],"file_updates":[...]}`,
+  and the picker walked the whole body as one object, so it only ever looked at the first file in the list; it
+  now finds the newest MAIN `.zip` among all of them.
+- **The launcher reads `nexus_key=` itself.** It used to be read only when the game started, which is after the
+  launcher has gone, so the Mods screen said "Add your own API key" however correct the key in `sh3.ini` was:
+  only `SH3_NEXUS_KEY` in the environment worked. The launcher now parses it with the other settings, keeps it
+  when it switches game folders, and logs the list it got (`mods: Nexus list: 10`).
+- Tested against the live API with a real key: the account and its Premium flag are read, the newest ten Silent
+  Hill 3 mods are listed, and a mod's file list parses down to its MAIN zip; the download then stops at the
+  Premium gate with that explanation, which is what a free key should get. The shipped launcher was then driven
+  from its own folder with the key in `sh3.ini` and no environment variable, and listed the ten mods. Not tested
+  with a Premium account, so the download-and-install path itself is still only covered by the local stand-in
+  from 1.9.0.
+
 ## 1.11.0 - check for updates, and install them
 
 - **The launcher updates itself from this repository's releases.** It asks `api.github.com` for the newest

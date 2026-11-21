@@ -258,7 +258,23 @@ static void ini_load(void) {
     FILE *f = fopen("sh3.ini", "r");
     char line[256], val[32];
     for (int i = 0; i < N_OPTS; i++) opts[i].cur = opts[i].def;
-    while (f && fgets(line, sizeof line, f))
+#ifdef _WIN32
+    /* nexus_key= is not an Options row, but the Mods screen needs it while the launcher is up: the runtime reads
+     * sh3.ini only when the game starts, which is after this. A personal key is about 96 characters, so the 32
+     * byte value above is too small for it. */
+    rt_nexus_key[0] = 0;
+#endif
+    while (f && fgets(line, sizeof line, f)) {
+#ifdef _WIN32
+        {
+            char k[192];
+            if (sscanf(line, " nexus_key = %191[^\r\n]", k) == 1) {
+                size_t l = strlen(k);
+                while (l && (k[l - 1] == ' ' || k[l - 1] == '\t')) k[--l] = 0;
+                snprintf(rt_nexus_key, sizeof rt_nexus_key, "%s", k);
+            }
+        }
+#endif
         for (int i = 0; i < N_OPTS; i++)
             if (ini_value(line, opts[i].key, val)) {
                 Opt *o = &opts[i];
@@ -267,6 +283,7 @@ static void ini_load(void) {
                 for (int j = 0; j < n_vals(o); j++)
                     if (!strcmp(o->vals[j], val)) o->cur = j;
             }
+    }
     if (f) fclose(f);
     for (int i = 0; i < N_OPTS; i++) opts[i].was = opts[i].cur;
 }
@@ -647,6 +664,9 @@ static void use_game_dir(const char *dir) {
     ini_save();
     if (rt_set_game_dir(dir)) {
         ini_load();      /* the new folder's sh3.ini */
+#ifdef _WIN32
+        nexus_set_key(rt_nexus_key);  /* and its nexus_key= */
+#endif
         mods_init();     /* and its mods/ */
         sound_reload();  /* and its sd.afs */
         row_note = "Game location changed";
@@ -882,6 +902,7 @@ static DWORD __stdcall nx_list_thread(void *unused) {
     int n = nexus_list(nx_mods, NEXUS_MAX_MODS, err, sizeof err);
     if (n > 0) nx_count = n;
     else snprintf(nx_list_err, sizeof nx_list_err, "%s", err);
+    rt_log("mods: Nexus list: %d%s%s", n, err[0] ? " - " : "", err);
     InterlockedExchange(&nx_list_done, 1);
     return 0;
 }

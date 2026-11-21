@@ -344,8 +344,9 @@ anything that is not the game is refused with the same words the command line us
 ### Mods
 
 The launcher has a Mods screen: **Mods** in its menu, or press **M** anywhere in it. The left column is what is
-installed from `mods/`; the right column is the Nexus Mods list for Silent Hill 3, straight from the official
-API (`api.nexusmods.com`) - nothing is scraped, which the site's terms forbid.
+installed from `mods/`; the right column is the newest Silent Hill 3 mods, straight from the official API
+(`api.nexusmods.com`, `latest_added.json` - the endpoint that replaced the old all-mods list in 2025) - nothing
+is scraped, which the site's terms forbid.
 
 To see the list, put your own personal API key (nexusmods.com, **API Access**) into `sh3.ini`:
 
