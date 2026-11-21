@@ -6,6 +6,7 @@
 #include "../mods/mods.h"  /* mods_init: Options > Game folder re-reads mods/ */
 #include "../runtime/win_posix.h"  /* win_confirm: Check this copy asks before it switches folders */
 #include "nexus.h"  /* the Mods screen: the Nexus list and its downloads */
+#include "updater.h" /* Check for updates: the newest release, downloaded and put in place */
 #include <SDL2/SDL.h>
 #include <math.h>
 
@@ -220,8 +221,14 @@ static Opt opts[] = {
     {"Widescreen", "widescreen", {"1", "0"}, {"On", "Off"}},
     {"Filter", "filter", {"0", "1", "2"}, {"Off", "CRT", "VHS"}},
     {"Camera", "camera", {"off", "ots", "first"}, {"Off", "Over the shoulder", "First person"}},
+#ifdef _WIN32
+    {"Auto update", "autoupdate", {"1", "0"}, {"On", "Off"}},
+#endif
 };
 #define N_OPTS (int)(sizeof opts / sizeof *opts)
+#ifdef _WIN32
+#define OPT_AUTOUPDATE (N_OPTS - 1)  /* the row above: checked when the launcher starts */
+#endif
 
 /* The rows under the sh3.ini options: the game location, which lives in the port's own sh3-pc.ini - the install
  * folder, or sh3.exe and a disc through the open-file dialog - then Back. */
@@ -407,15 +414,25 @@ static int poll_input(void) {
 static uint32_t *logo_px;
 static int logo_w, logo_h;
 
-static const char *menu_items[] = {"Play", "Options", "Mods", "Credits"};
+static const char *menu_items[] = {"Play", "Options", "Mods", "Credits", "Check for updates"};
 #define N_ITEMS (int)(sizeof menu_items / sizeof *menu_items)
+
+/* The update check runs on its own thread while the menu is up, so the menu is never held by the network. */
+#ifdef _WIN32
+static volatile LONG upd_state;  /* 0 not asked, 1 asking, 2 current, 3 newer, 4 error */
+static char upd_banner[160];     /* "Update v1.11.0 is ready  -  Check for updates" */
+#endif
 
 static void draw_menu(int sel) {
     for (int i = 0; i < CW * CH; i++) canvas[i] = C_BG;
     if (logo_px) image(logo_px, logo_w, logo_h, (CW - 800) / 2, 170, 800, 800 * logo_h / logo_w);
     text_c(320, 32, C_DIM, PORT_NAME);
-    for (int i = 0; i < N_ITEMS; i++) text_c(450 + i * 64, 44, i == sel ? C_SEL : C_TEXT, menu_items[i]);
-    text_c(684, 22, C_DIM, "A: select    M: mods    B: back");
+    for (int i = 0; i < N_ITEMS; i++) text_c(440 + i * 54, 44, i == sel ? C_SEL : C_TEXT, menu_items[i]);
+#ifdef _WIN32
+    if (upd_state == 3) text_c(700, 22, C_SEL, upd_banner);
+    else
+#endif
+    text_c(700, 22, C_DIM, "A: select    M: mods    B: back");
 }
 
 /* ---- credits ---- */
@@ -1058,6 +1075,145 @@ static void mods_screen(void) {
 static void mods_screen(void) {}
 #endif
 
+/* ---- updates ------------------------------------------------------------------------------------------
+ * GitHub's newest release of this port, from the launcher itself; the check needs no key and no account. A
+ * newer release is downloaded and its files are put beside this executable by a script that waits for this
+ * process to end - Windows locks a running .exe and the DLLs it has loaded - and then starts it again. Only the
+ * files the release carries are written, so the game folder's sh3.ini, savedata/ and mods/ are left alone. */
+#ifdef _WIN32
+static UpdaterRelease upd_rel;
+static char upd_err[600];
+static char upd_dl_err[600];
+static volatile LONG upd_dl;     /* 0 nothing, 1 downloading, 2 staged, 3 failed */
+static volatile LONG upd_leave;  /* the files are staged: this process has to end for them to be replaced */
+static int upd_offered;          /* the automatic offer was made once */
+
+static DWORD __stdcall upd_check_thread(void *unused) {
+    char err[600] = "";
+    int r;
+    (void)unused;
+    r = updater_check(&upd_rel, err, sizeof err);
+    if (r < 0) {
+        snprintf(upd_err, sizeof upd_err, "%s", err);
+        InterlockedExchange(&upd_state, 4);
+    } else if (r > 0) {
+        snprintf(upd_banner, sizeof upd_banner, "Update %s is ready  -  Check for updates", upd_rel.tag);
+        InterlockedExchange(&upd_state, 3);
+    } else
+        InterlockedExchange(&upd_state, 2);
+    rt_log("updater: newest is %s, this build is %s: %d%s%s", upd_rel.tag[0] ? upd_rel.tag : "none", updater_version(), r,
+           err[0] ? " - " : "", err);
+    return 0;
+}
+
+static void start_check(void) {
+    if (upd_state != 0) return;
+    InterlockedExchange(&upd_state, 1);
+    CreateThread(NULL, 0, upd_check_thread, NULL, 0, NULL);
+}
+
+static DWORD __stdcall upd_install_thread(void *unused) {
+    char zip[700], err[600] = "";
+    int ok;
+    (void)unused;
+    ok = updater_download(upd_rel.url, zip, sizeof zip, err, sizeof err) && updater_install(zip, err, sizeof err);
+    if (!ok) {
+        snprintf(upd_dl_err, sizeof upd_dl_err, "%s", err);
+        InterlockedExchange(&upd_dl, 3);
+        rt_log("updater: %s not installed: %s", upd_rel.tag, err);
+        return 0;
+    }
+    InterlockedExchange(&upd_dl, 2);
+    InterlockedExchange(&upd_leave, 1);
+    return 0;
+}
+
+/* A plain progress bar: the launcher draws on the CPU, so it is a rectangle. */
+static void bar(int x, int y, int w, int h, int pct) {
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    for (int py = y; py < y + h && py < CH; py++)
+        for (int px = x; px < x + w && px < CW; px++) canvas[py * CW + px] = px < x + w * pct / 100 ? C_SEL : C_RULE;
+}
+
+static void draw_updates(void) {
+    char line[400];
+    for (int i = 0; i < CW * CH; i++) canvas[i] = C_BG;
+    text_c(110, 56, C_TEXT, "Updates");
+    snprintf(line, sizeof line, "This launcher is version %s.", updater_version());
+    text_c(184, 26, C_DIM, line);
+    if (upd_dl == 1) {
+        text_c(268, 30, C_TEXT, "Downloading the new version...");
+        bar(340, 320, 600, 10, updater_progress);
+        snprintf(line, sizeof line, "%d%%", updater_progress);
+        text_c(350, 22, C_DIM, line);
+    } else if (upd_dl == 2) {
+        text_c(268, 30, C_TEXT, "The update is ready. The launcher restarts itself.");
+    } else if (upd_dl == 3) {
+        text_c(268, 30, C_SEL, "The update could not be installed.");
+        wrap_text(140, 312, 20, C_DIM, upd_dl_err);
+    } else if (upd_state <= 1) {
+        text_c(268, 30, C_TEXT, "Asking GitHub for the newest release...");
+    } else if (upd_state == 2) {
+        text_c(268, 30, C_TEXT, "That is the newest version.");
+    } else if (upd_state == 3) {
+        snprintf(line, sizeof line, "Version %s is available.", upd_rel.tag);
+        text_c(250, 34, C_TEXT, line);
+        snprintf(line, sizeof line, "%.110s", upd_rel.name);
+        text_c(296, 22, C_DIM, line);
+        if (upd_rel.size > 0) {
+            snprintf(line, sizeof line, "The download is %lld MB.", upd_rel.size / (1024 * 1024));
+            text_c(330, 22, C_DIM, line);
+        }
+        if (!updater_can_install()) {
+            wrap_text(140, 390, 20, C_DIM,
+                      "This build was made from the source tree, not from the release, so it is updated by "
+                      "rebuilding it. Download the release's launcher to use Check for updates.");
+        } else
+            wrap_text(140, 390, 20, C_DIM,
+                      "It replaces the launcher, SDL2.dll and README.txt beside this program, then starts the "
+                      "launcher again. sh3.ini, savedata/ and mods/ are not touched.");
+    } else {
+        text_c(268, 30, C_SEL, "The check did not work.");
+        wrap_text(140, 312, 20, C_DIM, upd_err);
+    }
+    if (upd_dl == 3) text_c(690, 22, C_DIM, "A: try again   B: back");
+    else if (upd_state == 3 && upd_dl == 0 && updater_can_install())
+        text_c(690, 22, C_DIM, "A: download and install   B: back");
+    else text_c(690, 22, C_DIM, "B: back");
+}
+
+/* 1 when the update is staged and this process has to end for its files to be replaced. */
+static int updates_screen(void) {
+    start_check();
+    fade(1);
+    for (;;) {
+        draw_updates();
+        present(canvas, CW, CH);
+        if (upd_leave) {
+            draw_updates();
+            present(canvas, CW, CH);
+            SDL_Delay(700);  /* the script replaces the files the moment this process ends */
+            return 1;
+        }
+        int in = poll_input();
+        if (in == IN_BACK) break;
+        if (in == IN_OK && (upd_state == 3 || upd_dl == 3) && (upd_dl == 0 || upd_dl == 3) &&
+            (upd_dl == 3 || updater_can_install())) {
+            sound(SND_OK);
+            InterlockedExchange(&upd_dl, 1);
+            updater_progress = 0;
+            CreateThread(NULL, 0, upd_install_thread, NULL, 0, NULL);
+        }
+        SDL_Delay(16);
+    }
+    fade(0);
+    return 0;
+}
+#else
+static int updates_screen(void) { return 0; }
+#endif
+
 void rt_game_setup(void);  /* rt_core.c */
 
 void launcher_run(void) {
@@ -1083,6 +1239,7 @@ void launcher_run(void) {
     ini_load();
 #ifdef _WIN32
     nexus_set_key(rt_nexus_key);
+    if (opts[OPT_AUTOUPDATE].cur == 0) start_check();  /* silent: the menu carries the answer when it comes */
 #endif
     draw_menu(0);
     if (getenv("SH3_DROP")) {  /* a scripted drop, for tests */
@@ -1093,6 +1250,18 @@ void launcher_run(void) {
     for (int sel = 0, dirty = 0;; ) {
         if (dirty) { draw_menu(sel); dirty = 0; }
         present(canvas, CW, CH);
+#ifdef _WIN32
+        /* Auto update: the check that ran while the warning screen was up found a newer release, so offer it
+         * once. B in the screen plays on this version; the menu row is there for a manual check. */
+        if (upd_state == 3 && !upd_offered) {
+            upd_offered = 1;
+            fade(0);
+            if (updates_screen()) exit(0);
+            draw_menu(sel);
+            fade(1);
+            continue;
+        }
+#endif
         int in = poll_input();
         if (in == IN_DROP) {
             handle_drop(drop_file);
@@ -1139,6 +1308,12 @@ void launcher_run(void) {
         if (in == IN_OK && sel == 3) {
             fade(0);
             credits();
+            draw_menu(sel);
+            fade(1);
+        }
+        if (in == IN_OK && sel == 4) {
+            fade(0);
+            if (updates_screen()) exit(0);
             draw_menu(sel);
             fade(1);
         }

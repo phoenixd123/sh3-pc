@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.11.0 - check for updates, and install them
+
+- **The launcher updates itself from this repository's releases.** It asks `api.github.com` for the newest
+  release of `phoenixd123/sh3-pc` (no key, no account), compares its tag with the version it was built as, and
+  when there is a newer one it opens an **Updates** screen at start-up: A downloads the release's
+  `-win64.zip`, puts its `sh3-pc-launcher.exe`, `SDL2.dll` and `README.txt` beside the launcher and starts the
+  launcher again; B plays the version you have. `sh3.ini`, `sh3-pc.ini`, `savedata/` and `mods/` are not touched.
+- **Check for updates** is a menu row too, for asking by hand; it shows the release's name and size, and the
+  reason when the check cannot be made (no connection, GitHub rate limiting, no release yet).
+- **Options > Auto update** (`autoupdate=1`/`0`) turns the start-up check off. The check runs on its own thread,
+  while the warning screen is up, so it never holds the menu.
+- Windows locks a running `.exe` and the DLLs it has loaded, so the files are replaced by a one-shot script that
+  waits for this process to end, copies them in (retrying while the lock is held), and starts the launcher again.
+- New files `src/d3d8/updater.c|h` (WinHTTP + miniz, linked against `winhttp`), and `PORT_VERSION` in
+  `CMakeLists.txt` as the version the check compares with and the NACP is stamped from.
+- Tested against a local stand-in for the GitHub API (`build/mock_update.py`): the version comparison (1.11.0
+  newer than 1.10.1, 1.9.0 not newer than 1.10.0, a leading `v` ignored), the newest release found with its
+  win64 zip (not the other assets), the download, and the staging step - the release's two files unpacked flat,
+  a nested entry skipped, and the script naming the launcher's own folder. In the launcher itself, with scripted
+  keys: **Check for updates** down the menu ran the check and A staged `v9.9.9` and exited for the restart; with
+  `autoupdate=1` the same happened without touching the menu; when the newest release is this build (1.11.0) the
+  screen said so and B went back; and from a build named `sh3.exe` A installs nothing. The script was not allowed
+  to run in these tests (`SH3_UPDATE_DRYRUN=1`), so no real file was replaced here, and nothing was tried against
+  the live GitHub API or on a Deck.
+
 ## 1.10.1 - the camera's distances, in game
 
 - **Alt + arrows / Page Up / Page Down** while `camera=` is on move the eye a step at a time (Shift for a
@@ -150,7 +175,7 @@
   password lookup), each checked against the original bytes; `tools/patch_image.py` applies or checks one file
   on its own. The addresses and table shapes are in MODDING.md.
 
-## 1.2.0 — mods, installed from the launcher
+## 1.2.0 ï¿½ mods, installed from the launcher
 
 - **Install a mod, from the game.** Options has an **Install a mod** row that asks for a `.zip`, unpacks it into
   `mods/<archive name>/` and loads it straight away; dropping the archive on the executable does the same and starts
@@ -162,7 +187,7 @@
 - **The credits roll names only this port's author.** The recompilation it stands on is credited in
   [CREDITS.md](CREDITS.md), which is where the licences require it.
 
-## 1.1.1 — the launcher as a download, and a picker that takes files
+## 1.1.1 ï¿½ the launcher as a download, and a picker that takes files
 
 - **Download the launcher.** The Windows launcher is attached to this release as a zip (`sh3-pc-launcher.exe`,
   `SDL2.dll`, `README.txt`), so it runs without a build. It is the launcher only: the recompiled game code is
@@ -175,7 +200,7 @@
   does, save it in `sh3-pc.ini` and reload `sh3.ini`, `mods/` and the menu sounds; a path that is not the game is
   refused with the same message and nothing changes.
 
-## 1.1.0 — a launcher that finds the game, a real credit roll, F12 screenshots
+## 1.1.0 ï¿½ a launcher that finds the game, a real credit roll, F12 screenshots
 
 - **The port asks for the game.** Started without an argument it opens the Windows folder picker, checks that
   `sh3.exe` and `data/` are in the folder and saves it in `sh3-pc.ini` beside its own executable; later launches go

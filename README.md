@@ -42,12 +42,12 @@ roll (on the first launch, and again from the menu).
 
 **There are no gameplay screenshots here yet, because they cannot be made without the game.** Taking one is a
 single key: press **F12** in game and the frame it was pressed on is written to `screenshots/sh3-<date>-<time>.png`
-in the game folder, at the game's own resolution. That is what belongs in this table — nothing here is a mock-up or
+in the game folder, at the game's own resolution. That is what belongs in this table ï¿½ nothing here is a mock-up or
 a render of what the port might look like.
 
 ## Getting it running on Windows
 
-1. **Your own game.** Silent Hill 3 for PC installed — the 2003 release, `sh3.exe` of 3,338,240 bytes (SHA-1
+1. **Your own game.** Silent Hill 3 for PC installed ï¿½ the 2003 release, `sh3.exe` of 3,338,240 bytes (SHA-1
    `aa2aca6dba19bf510c9c2e92eefdc15e98266581`) and its `data/` folder (about 5 GB). Which executable that is, and
    why the retail disc on its own is not enough, is
    [the next section](#where-the-game-files-come-from).
@@ -76,12 +76,12 @@ Windows layer, so at run time there is **no disc check, no SecuROM, no installer
 
 What it does need is the *unprotected* executable, which is why the size and SHA-1 above are pinned:
 
-- the retail `sh3.exe` is wrapped — part of its code is encrypted in the file and only becomes the code the game
+- the retail `sh3.exe` is wrapped ï¿½ part of its code is encrypted in the file and only becomes the code the game
   executes after SecuROM's loader has decrypted it;
 - a static recompiler translates the bytes in the file. Given the wrapped executable it translates the wrapper,
   not the game.
 
-So the executable to point at is the one the game actually runs as — the same one the community's no-CD/fixed
+So the executable to point at is the one the game actually runs as ï¿½ the same one the community's no-CD/fixed
 executables are. Install from your disc (or a backup image of it), then use the executable that belongs to that
 install. If `sh3.exe` is a different size the port says so in the log instead of pretending: a build made from a
 different executable will crash, not run.
@@ -109,6 +109,9 @@ which is how the imported download runs without a recompiled build; a full build
 - **Mods in one click**: Options > **Install a mod** takes a `.zip`, unpacks it into `mods/` under the game folder
   and loads it without a restart; dropping the archive on the executable installs it and starts the game. The layout
   is worked out from the archive itself: a `files/` folder, a wrapper folder, or loose `data/...`.
+- **Check for updates**: the launcher asks GitHub for this port's newest release and, when there is one, offers it
+  when it starts; **Check for updates** in the menu asks by hand. A downloads it, puts the new launcher in place and
+  starts it again ([Updates](#updates)). **Options > Auto update** turns the start-up check off.
 - **Widescreen**, with a switch: 16:9 at 1280x720 by default, 1920x1080 for docked play, or the original 4:3
   (`widescreen=0` in `sh3.ini`, or Options > Widescreen). ThirteenAG's WidescreenFix, ported. The camera widens in gameplay, cutscenes keep their framing without the
   letterbox, and menus and HUD stay in a centered 4:3 area.
@@ -331,6 +334,7 @@ preset the mode was showing.
 | `widescreen=1` | the 16:9 framing (default); `0` restores the original 4:3 camera, menus and cutscene borders |
 | `filter=0` | a look over the whole frame: `0` off, `1` CRT (scanlines, warm tube, darker corners), `2` VHS (colour bleed, grain, slow roll) |
 | `texdump=1` | write every texture the game uploads to `texdump/`, for making a pack |
+| `autoupdate=1` | the launcher checks GitHub for a newer release when it starts (default; `0` only answers **Check for updates** in the menu). Windows only |
 
 The port keeps one file of its own beside its executable: `sh3-pc.ini`, holding `game=`, the folder the launcher
 was pointed at. **Options > Game folder** picks it again with the Windows folder dialog, starting where it is now,
@@ -361,6 +365,25 @@ same thing for a test run.
 
 The same installer as before handles both routes: a zip is unpacked into `mods/<name>/`, its shape is worked out
 (`files/`, or `mod.ini` as it stands), and the game picks it up on the next start.
+
+### Updates
+
+The launcher updates itself from this repository's releases. It asks `api.github.com` for the newest release of
+`phoenixd123/sh3-pc` - no key and no account - and compares its tag with the version the launcher was built as.
+
+- **At start-up**, when `autoupdate=1` (the default), the check runs in the background while the warning screen is
+  up. A newer release opens the **Updates** screen once: **A** downloads and installs it, **B** plays this version.
+- **Check for updates** in the menu asks again at any time and shows what it found, including the error when there
+  is no connection.
+- Installing downloads the release's `sh3-pc-launcher-<version>-win64.zip`, unpacks its `sh3-pc-launcher.exe`,
+  `SDL2.dll` and `README.txt` into `%TEMP%\sh3-pc-update`, and writes a small script that copies them beside the
+  launcher once the process has ended - Windows locks a running `.exe` and its DLLs - then starts the launcher
+  again. Only those files are written: `sh3.ini`, `sh3-pc.ini`, `savedata/` and `mods/` are left alone.
+- A build made from source (named `sh3.exe`) is told that it is updated by rebuilding, and the screen offers
+  nothing to install: the release is the launcher, not a build of your copy.
+
+For a test run, `SH3_UPDATE_API` points the check at another address (a local stand-in is in
+`build/mock_update.py`) and `SH3_UPDATE_DRYRUN=1` writes the install script without starting it.
 
 ## Building
 
