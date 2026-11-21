@@ -1,6 +1,7 @@
 /* DINPUT8: a keyboard and one gamepad, read from SDL. */
 #include "../runtime/rt.h"
 #include "../d3d8/freecam.h"
+#include "../d3d8/camera.h"
 #include <SDL2/SDL.h>
 
 enum { DEV_KEYBOARD = 1, DEV_MOUSE, DEV_PAD };
@@ -407,6 +408,7 @@ METHOD(dev_GetDeviceState, 3) {
         int count = n < SDL_NUM_SCANCODES ? n : SDL_NUM_SCANCODES;
         memcpy(keys, k, (size_t)count);
         freecam_filter_keys(keys, count);  /* the freecam owns WASD and its other keys */
+        camera_filter_keys(keys, count);   /* and the camera owns Alt + the arrows while it is on */
         memset(GPTR(out), 0, size);
         int scripted = getenv("SH3_KEYS") != NULL;  /* a scripted run ignores the real keyboard */
         for (int i = 0; i < count; i++)

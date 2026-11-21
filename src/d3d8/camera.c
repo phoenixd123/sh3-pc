@@ -11,6 +11,7 @@
 #include "freecam.h"
 #include "freecam_math.h"
 #include "../runtime/rt.h"
+#include <SDL2/SDL.h>
 
 /* Offsets in the game's units, along forward, right and up. The presets are starting points: a player who wants
  * a different distance sets cam_forward= (and cam_right=, cam_up=) in sh3.ini, which win over all presets. */
@@ -44,8 +45,40 @@ void camera_view(float out[16], const float game[16]) {
     freecam_view_shift(out, forward, right, up);
 }
 
+static const char *const axis_names[] = {"forward", "right", "up"};
+
+void camera_nudge(int axis, float delta) {
+    if (!camera_active() || axis < 0 || axis > 2) return;
+    if (!rt_cam_custom) {  /* start from the preset the mode was on, then it is the player's numbers */
+        float forward, right, up;
+        offsets(&forward, &right, &up);
+        rt_cam_forward = forward;
+        rt_cam_right = right;
+        rt_cam_up = up;
+        rt_cam_custom = 1;
+    }
+    float *v = axis == 0 ? &rt_cam_forward : axis == 1 ? &rt_cam_right : &rt_cam_up;
+    *v += delta;
+    if (*v < -20.0f) *v = -20.0f;
+    if (*v > 20.0f) *v = 20.0f;
+    rt_log("camera: %s %+.2f -> forward %.2f right %.2f up %.2f", axis_names[axis], delta,
+           rt_cam_forward, rt_cam_right, rt_cam_up);
+    rt_log("camera: sh3.ini  cam_forward=%.2f  cam_right=%.2f  cam_up=%.2f", rt_cam_forward, rt_cam_right, rt_cam_up);
+}
+
+void camera_filter_keys(uint8_t *keys, int count) {
+    static const int owned[] = {SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
+                                SDL_SCANCODE_PAGEUP, SDL_SCANCODE_PAGEDOWN};
+    if (!camera_active()) return;
+    if (!((SDL_SCANCODE_LALT < count && keys[SDL_SCANCODE_LALT]) ||
+          (SDL_SCANCODE_RALT < count && keys[SDL_SCANCODE_RALT]))) return;
+    for (size_t i = 0; i < sizeof owned / sizeof *owned; i++)
+        if (owned[i] < count) keys[owned[i]] = 0;
+}
+
 void camera_cycle(void) {
     rt_camera = (rt_camera + 1) % 3;
+    rt_cam_custom = 0;  /* a preset comes back: F2 undoes the nudges */
     float forward, right, up;
     offsets(&forward, &right, &up);
     rt_log("camera: %s (forward %.2f, right %.2f, up %.2f)", names[rt_camera], forward, right, up);

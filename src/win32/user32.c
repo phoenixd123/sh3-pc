@@ -77,6 +77,18 @@ void rt_pump_events(void) {
             else if (e.key.repeat) {}
             else if (e.key.keysym.sym == SDLK_F1) freecam_toggle();
             else if (e.key.keysym.sym == SDLK_F2) camera_cycle();
+            else if ((e.key.keysym.mod & KMOD_ALT) && camera_active()) {
+                /* camera= in sh3.ini and F2 set the view; these move it a step at a time and log the numbers. */
+                float step = (e.key.keysym.mod & KMOD_SHIFT) ? 0.25f : 0.05f;
+                switch (e.key.keysym.sym) {
+                case SDLK_UP: camera_nudge(0, step); break;
+                case SDLK_DOWN: camera_nudge(0, -step); break;
+                case SDLK_RIGHT: camera_nudge(1, step); break;
+                case SDLK_LEFT: camera_nudge(1, -step); break;
+                case SDLK_PAGEUP: camera_nudge(2, step); break;
+                case SDLK_PAGEDOWN: camera_nudge(2, -step); break;
+                }
+            }
             else if (e.key.keysym.sym == SDLK_COMMA) freecam_step(-1);
             else if (e.key.keysym.sym == SDLK_PERIOD) freecam_step(1);
             else if (e.key.keysym.sym == SDLK_LEFTBRACKET) freecam_step(-10);

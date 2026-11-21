@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.10.1 - the camera's distances, in game
+
+- **Alt + arrows / Page Up / Page Down** while `camera=` is on move the eye a step at a time (Shift for a
+  bigger step) and log `cam_forward=`, `cam_right=` and `cam_up=` in the form to paste into `sh3.ini`. F2
+  starts again from the presets.
+- The keys are kept from the guest while Alt is held in a camera mode, as the freecam's own keys are.
+- Tested: the launcher's **Camera** row walked with scripted keys now that the "Press A" screen is passed
+  (`SH3_LAUNCHER=1`, `SH3_KEYS`): `filter=0` in `sh3.ini` became `filter=0` + `camera=ots`, and a second run
+  from `camera=ots` wrote `camera=first`, and a third from `camera=first` wrote `camera=off`: the row cycles and
+  the file is rewritten in place. (What held the keys up was not a Windows dialog but the launcher's own "Press A"
+  warning screen, which swallows input until it is passed.) The nudge keys
+  were not tried in game (no sh3.exe here); the shift math they feed is the same tested in 1.10.0.
+
 ## 1.10.0 - the camera: over the shoulder and first person
 
 - **`camera=` and F2.** F2 cycles off, over the shoulder and first person in game; `camera=ots` or

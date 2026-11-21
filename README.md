@@ -304,6 +304,18 @@ The distances are in the game's units, along the view's forward, right and up; `
 and `cam_up=` in `sh3.ini` replace the preset's, which is what to do when the camera sits inside Heather or
 too far behind her for the area being played.
 
+While a camera mode is on, **Alt** with the **arrow keys** and **Page Up / Page Down** move the eye a step at a
+time (0.05; hold **Shift** for 0.25): Up / Down are forward, Left / Right are right, Page Up / Page Down are up.
+Each step logs the three numbers in the form to paste, so a distance found by looking can go straight into
+`sh3.ini`:
+
+```
+camera: sh3.ini  cam_forward=2.35  cam_right=0.45  cam_up=0.20
+```
+
+**F2** starts again from the presets and forgets the nudges; the first nudge after it continues from the
+preset the mode was showing.
+
 ## Settings
 
 `sh3.ini`, next to the NRO (every line is optional); the launcher's Options screen sets `resolution` and `cores`:

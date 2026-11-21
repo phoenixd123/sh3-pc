@@ -330,6 +330,7 @@ static int scripted_menu_key(void) {
             if (fired[i] == at) seen = 1;
         if (code && !seen && now >= at && now < at + hold) {
             fired[nfired++] = at;
+            rt_log("launcher: scripted key %d at %.1fs", code, now);  /* SH3_KEYS: what the script sent */
             return code;
         }
         if (*k == ',') k++;
