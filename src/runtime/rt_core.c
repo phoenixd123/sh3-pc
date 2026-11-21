@@ -50,6 +50,9 @@ int rt_aniso = 8;        /* aniso=1 in sh3.ini turns anisotropic filtering off *
 int rt_ws = 1;char rt_nexus_key[128];   /* nexus_key= in sh3.ini: the player's own Nexus API key */
            /* widescreen=0 in sh3.ini keeps the 4:3 framing */
 int rt_filter;           /* filter=1 CRT, 2 VHS in sh3.ini; 0 (the default) blits as before */
+int rt_camera;           /* camera= in sh3.ini and F2 in game (src/d3d8/camera.c) */
+int rt_cam_custom;       /* cam_forward=/cam_right=/cam_up= in sh3.ini replace the preset's offsets */
+float rt_cam_forward, rt_cam_right, rt_cam_up;
 
 /* log=1 in sh3.ini also writes sh3.log next to the game. On the Switch it is off unless asked for (launched
  * by nxlink, or log=1): writing it costs an SD card write per line. On PC the console always gets the output,
@@ -498,8 +501,9 @@ void launcher_run(void);  /* src/d3d8/launcher.c */
 uint32_t rt_res_w = 1280, rt_res_h = 720;
 static void read_ini(void) {
     FILE *ini = fopen("sh3.ini", "r");
-    char line[128];
+    char line[128], word[32];
     unsigned a, b, cores = 3;
+    float f;
     while (ini && fgets(line, sizeof line, ini)) {
         if (sscanf(line, " resolution = %ux%u", &a, &b) == 2 && a >= 320 && b >= 240 && a <= 1920 && b <= 1440)
             rt_res_w = a, rt_res_h = b;
@@ -509,6 +513,14 @@ static void read_ini(void) {
         if (sscanf(line, " aniso = %u", &a) == 1) rt_aniso = a > 16 ? 16 : a < 1 ? 1 : a;
         if (sscanf(line, " widescreen = %u", &a) == 1) rt_ws = a != 0;
         if (sscanf(line, " filter = %u", &a) == 1) rt_filter = a > 2 ? 2 : a;
+        if (sscanf(line, " camera = %31s", word) == 1) {
+            if (!strcmp(word, "ots") || !strcmp(word, "shoulder") || !strcmp(word, "1")) rt_camera = 1;
+            else if (!strcmp(word, "first") || !strcmp(word, "fp") || !strcmp(word, "2")) rt_camera = 2;
+            else if (!strcmp(word, "off") || !strcmp(word, "0")) rt_camera = 0;
+        }
+        if (sscanf(line, " cam_forward = %f", &f) == 1) rt_cam_forward = f, rt_cam_custom = 1;
+        if (sscanf(line, " cam_right = %f", &f) == 1) rt_cam_right = f, rt_cam_custom = 1;
+        if (sscanf(line, " cam_up = %f", &f) == 1) rt_cam_up = f, rt_cam_custom = 1;
         if (sscanf(line, " log = %u", &a) == 1) log_on = a;
         if (sscanf(line, " nexus_key = %127[^\r\n]", rt_nexus_key) == 1) {
             size_t k = strlen(rt_nexus_key);

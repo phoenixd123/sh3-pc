@@ -44,6 +44,25 @@ int freecam_view_adopt(const float m[16], float pos[3], float *yaw, float *pitch
     return 1;
 }
 
+void freecam_view_shift(float m[16], float forward, float right, float up) {
+    if (!finite4(m) || (forward == 0.0f && right == 0.0f && up == 0.0f)) return;
+    /* Columns 0, 1, 2 are the view's right, up and forward axes in world space, and the translation row is
+     * -axis . eye for each: moving the eye by d drops d . axis from each entry. Normalised, so a scaled matrix
+     * still moves the eye by the distances asked for. */
+    float col[3][3] = {{m[0], m[4], m[8]}, {m[1], m[5], m[9]}, {m[2], m[6], m[10]}};
+    float len[3], d[3] = {0, 0, 0};
+    for (int c = 0; c < 3; c++) {
+        len[c] = sqrtf(col[c][0] * col[c][0] + col[c][1] * col[c][1] + col[c][2] * col[c][2]);
+        if (len[c] < 1e-6f) return;
+    }
+    for (int c = 0; c < 3; c++) {
+        float amount = c == 0 ? right : c == 1 ? up : forward;
+        for (int i = 0; i < 3; i++) d[i] += col[c][i] / len[c] * amount;
+    }
+    for (int c = 0; c < 3; c++)
+        m[12 + c] -= (d[0] * col[c][0] + d[1] * col[c][1] + d[2] * col[c][2]) / len[c];
+}
+
 void freecam_proj_scale(float out[16], const float in[16], float factor) {
     memcpy(out, in, 64);
     if (factor > 0) { out[0] *= factor; out[5] *= factor; }

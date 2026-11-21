@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.10.0 - the camera: over the shoulder and first person
+
+- **`camera=` and F2.** F2 cycles off, over the shoulder and first person in game; `camera=ots` or
+  `camera=first` starts in one, and the launcher's Options has a **Camera** row for it. The game's view is
+  shifted along its own axes as it is handed to the shaders, so the game's camera, collision, aiming and
+  culling are untouched: it is a camera, not a game mode. `cam_forward=`, `cam_right=` and `cam_up=` set the
+  distance instead of the preset's.
+- New files `src/d3d8/camera.c|h`; `freecam_view_shift` in `src/d3d8/freecam_math.c` moves the eye of a view
+  matrix.
+- Tested: a shift moves the eye by exactly the distances asked for along the view's own axes and does not
+  turn it, a zero shift changes nothing and a degenerate matrix is left alone; the launcher builds and links
+  with the new Options row, whose values are the words the parser above reads. Not tested in game (no sh3.exe
+  here) and the row was not walked on screen: the preset distances are starting points, and the camera is
+  visual only.
+
 ## 1.9.0 - the Mods screen and Nexus Mods
 
 - **Mods screen** (menu entry, or **M** anywhere in the launcher): installed mods on the left, the Nexus Mods list

@@ -1,6 +1,7 @@
 /* USER32, GDI32, ADVAPI32, OLE32: one SDL window and a minimal message loop. */
 #include "../runtime/rt.h"
 #include "../d3d8/freecam.h"
+#include "../d3d8/camera.h"
 #include <SDL2/SDL.h>
 #include <ctype.h>
 
@@ -75,6 +76,7 @@ void rt_pump_events(void) {
             if (e.key.keysym.sym == SDLK_F12) rt_shot_request = 1;
             else if (e.key.repeat) {}
             else if (e.key.keysym.sym == SDLK_F1) freecam_toggle();
+            else if (e.key.keysym.sym == SDLK_F2) camera_cycle();
             else if (e.key.keysym.sym == SDLK_COMMA) freecam_step(-1);
             else if (e.key.keysym.sym == SDLK_PERIOD) freecam_step(1);
             else if (e.key.keysym.sym == SDLK_LEFTBRACKET) freecam_step(-10);

@@ -219,6 +219,7 @@ static Opt opts[] = {
     {"Game threads", "cores", {"3", "1"}, {"Three cores", "One core"}},
     {"Widescreen", "widescreen", {"1", "0"}, {"On", "Off"}},
     {"Filter", "filter", {"0", "1", "2"}, {"Off", "CRT", "VHS"}},
+    {"Camera", "camera", {"off", "ots", "first"}, {"Off", "Over the shoulder", "First person"}},
 };
 #define N_OPTS (int)(sizeof opts / sizeof *opts)
 

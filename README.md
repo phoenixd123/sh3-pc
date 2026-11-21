@@ -286,6 +286,24 @@ freeze becomes a slow advance instead of a deadlock.
 It moves the render camera, not the game's: the game still culls what its own camera cannot see, so a view
 pushed far from it can leave geometry out, and the near and far planes stay the game's.
 
+## Camera
+
+**F2** cycles the camera between off, an **over the shoulder** view and a **first person** view, and
+`camera=ots` or `camera=first` in `sh3.ini` starts the game with one. The view is moved along the axes the
+game's own camera looks along: the scene is drawn from a point closer to Heather, while collision, aiming,
+the game's culling and the menus stay where the game put them, so this is a camera, not a new game mode.
+An object between the game's camera and the moved eye is still drawn, because the game drew it.
+
+| Mode | `camera=` | forward | right | up |
+| --- | --- | --- | --- | --- |
+| off | `off` (or `0`) | 0 | 0 | 0 |
+| over the shoulder | `ots` (or `1`) | 1.10 | 0.45 | 0.10 |
+| first person | `first` (or `2`) | 2.20 | 0.00 | 0.20 |
+
+The distances are in the game's units, along the view's forward, right and up; `cam_forward=`, `cam_right=`
+and `cam_up=` in `sh3.ini` replace the preset's, which is what to do when the camera sits inside Heather or
+too far behind her for the area being played.
+
 ## Settings
 
 `sh3.ini`, next to the NRO (every line is optional); the launcher's Options screen sets `resolution` and `cores`:

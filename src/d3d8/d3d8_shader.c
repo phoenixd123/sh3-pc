@@ -2,6 +2,7 @@
  * bytecode translated once. Programs are cached by the state that shaped them. */
 #include "d3d8.h"
 #include "freecam.h"
+#include "camera.h"
 #include <stdarg.h>
 #include <math.h>
 #include <SDL2/SDL.h>
@@ -783,6 +784,8 @@ void shader_bind_for_draw(int rhw, uint32_t vs, const int *present) {
     glUseProgram(p->id);
 
     /* Uniforms */
+    float viewm[16];
+    camera_view(viewm, dev->view);  /* camera= / F2: a shifted copy, so the game's own view stays untouched */
     glUniform2f(p->halfpix, 1.0f / dev->vp_w, -1.0f / dev->vp_h);
     float vp[4] = {dev->vp_x, dev->vp_y, dev->vp_w, dev->vp_h};
     if (p->vp >= 0) glUniform4fv(p->vp, 1, vp);
@@ -794,9 +797,9 @@ void shader_bind_for_draw(int rhw, uint32_t vs, const int *present) {
     if (p->wvp >= 0) {
         float wv[16], wvp[16], vpm[16], nm[9], proj[16];
         freecam_projection(proj, dev->proj);
-        mat_mul(wv, dev->world[0], dev->view);
+        mat_mul(wv, dev->world[0], viewm);
         mat_mul(wvp, wv, proj);
-        mat_mul(vpm, dev->view, proj);
+        mat_mul(vpm, viewm, proj);
         glUniformMatrix4fv(p->wvp, 1, GL_FALSE, wvp);
         if (p->wv >= 0) glUniformMatrix4fv(p->wv, 1, GL_FALSE, wv);
         if (p->viewproj >= 0) glUniformMatrix4fv(p->viewproj, 1, GL_FALSE, vpm);
@@ -815,7 +818,7 @@ void shader_bind_for_draw(int rhw, uint32_t vs, const int *present) {
         for (int i = 0; i < 8; i++) {
             Light *l = &dev->light[i];
             memcpy(dif[i], l->diffuse, 16); memcpy(spe[i], l->specular, 16); memcpy(ambl[i], l->ambient, 16);
-            const float *V = dev->view;  /* lights live in view space */
+            const float *V = viewm;  /* lights live in view space */
             for (int c = 0; c < 3; c++) {
                 pos[i][c] = l->pos[0] * V[c] + l->pos[1] * V[4 + c] + l->pos[2] * V[8 + c] + V[12 + c];
                 dir[i][c] = l->dir[0] * V[c] + l->dir[1] * V[4 + c] + l->dir[2] * V[8 + c];

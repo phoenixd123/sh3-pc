@@ -12,3 +12,7 @@ int freecam_view_adopt(const float m[16], float pos[3], float *yaw, float *pitch
 /* A copy of `in` with the horizontal and vertical field of view scaled by `factor` (>1 is wider), which
  * leaves the near and far planes and the aspect ratio alone. */
 void freecam_proj_scale(float out[16], const float in[16], float factor);
+
+/* Moves the eye of a view matrix by `forward`, `right` and `up`, measured along the view's own axes, and leaves
+ * the orientation alone. A matrix with a broken or degenerate basis is left as it is. */
+void freecam_view_shift(float m[16], float forward, float right, float up);
