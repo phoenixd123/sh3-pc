@@ -11,7 +11,7 @@
 #include <stddef.h>
 
 #ifndef PORT_VERSION
-#define PORT_VERSION "1.11.1"
+#define PORT_VERSION "1.11.2"
 #endif
 
 #define UPDATER_REPO "phoenixd123/sh3-pc"

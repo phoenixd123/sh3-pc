@@ -344,9 +344,10 @@ anything that is not the game is refused with the same words the command line us
 ### Mods
 
 The launcher has a Mods screen: **Mods** in its menu, or press **M** anywhere in it. The left column is what is
-installed from `mods/`; the right column is the newest Silent Hill 3 mods, straight from the official API
-(`api.nexusmods.com`, `latest_added.json` - the endpoint that replaced the old all-mods list in 2025) - nothing
-is scraped, which the site's terms forbid.
+installed from `mods/`; the right column is Silent Hill 3's mods from the official v2 GraphQL API
+(`api.nexusmods.com/v2/graphql`), most endorsed first - nothing is scraped, which the site's terms forbid. The
+v1 endpoint that used to list a game's mods was retired, and the newest-only list that stood in for it carried
+ten; this asks for the whole game.
 
 To see the list, put your own personal API key (nexusmods.com, **API Access**) into `sh3.ini`:
 
@@ -355,7 +356,8 @@ nexus_key=your-key-here
 ```
 
 The key stays on your machine; it is not part of the repository, and `SH3_NEXUS_KEY` in the environment does the
-same thing for a test run.
+same thing for a test run. `sh3.ini` is read again every time the Mods screen opens, so a key added while the
+launcher is running is picked up without a restart.
 
 - **A** downloads the selected mod's main file and installs it into `mods/`, in the background, with progress on
   the screen. This uses the API's download endpoint, which Nexus only allows for **Premium** accounts: a free key

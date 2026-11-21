@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.11.2 - the whole mod list, and a key that does not need a restart
+
+- **The list is the game's whole catalogue again**, not the ten newest: it comes from Nexus's v2 GraphQL API
+  (`mods(filter: { gameDomainName: { value: "silenthill3" } }, sort: { endorsements: { direction: DESC } })`),
+  which answered 76 mods for Silent Hill 3, most endorsed first. `latest_added.json` - the 1.11.1 stopgap - only
+  carries ten.
+- **`sh3.ini` is read again whenever the Mods screen opens**, so a key added while the launcher is running takes
+  effect the next time the screen opens; a different key throws away the list that was already fetched. The hint
+  now says that instead of leaving people to guess whether it needs a restart.
+- POST is now part of the same WinHTTP helper as the GETs (`http_send`), which is what the GraphQL call needs.
+- Tested live with a real key: 76 mods listed, sorted by endorsements, and the file picker and the Premium gate
+  re-checked. In the launcher, with a key written into `sh3.ini` while it was running: the first open showed the
+  hint, the second logged `mods: Nexus list: 76`, no restart. Not tested with a Premium account, so a real
+  download-and-install is still only covered by the local stand-in from 1.9.0.
+
 ## 1.11.1 - the Mods list, against the API as it is now
 
 - **Nexus retired `/v1/games/{game}/mods.json`** and it answers 404, so the Mods screen's right column never

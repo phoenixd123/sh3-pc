@@ -254,27 +254,33 @@ static int ini_value(const char *line, const char *key, char *val) {
     return sscanf(line, fmt, val) == 1;
 }
 
+#ifdef _WIN32
+/* nexus_key= in sh3.ini. Read when the launcher starts and again whenever the Mods screen opens, so a key added
+ * to the file does not need the launcher restarted. A personal key is about 96 characters, which the 32 byte
+ * value the Options rows use is far too small for. */
+static int ini_nexus_key(void) {
+    FILE *f = fopen("sh3.ini", "r");
+    char line[256], k[192];
+    rt_nexus_key[0] = 0;
+    while (f && fgets(line, sizeof line, f))
+        if (sscanf(line, " nexus_key = %191[^\r\n]", k) == 1) {
+            size_t l = strlen(k);
+            while (l && (k[l - 1] == ' ' || k[l - 1] == '\t')) k[--l] = 0;
+            snprintf(rt_nexus_key, sizeof rt_nexus_key, "%s", k);
+        }
+    if (f) fclose(f);
+    return nexus_set_key(rt_nexus_key);
+}
+#endif
+
 static void ini_load(void) {
     FILE *f = fopen("sh3.ini", "r");
     char line[256], val[32];
     for (int i = 0; i < N_OPTS; i++) opts[i].cur = opts[i].def;
 #ifdef _WIN32
-    /* nexus_key= is not an Options row, but the Mods screen needs it while the launcher is up: the runtime reads
-     * sh3.ini only when the game starts, which is after this. A personal key is about 96 characters, so the 32
-     * byte value above is too small for it. */
-    rt_nexus_key[0] = 0;
+    ini_nexus_key();  /* not an Options row: the Mods screen needs it before the game starts */
 #endif
-    while (f && fgets(line, sizeof line, f)) {
-#ifdef _WIN32
-        {
-            char k[192];
-            if (sscanf(line, " nexus_key = %191[^\r\n]", k) == 1) {
-                size_t l = strlen(k);
-                while (l && (k[l - 1] == ' ' || k[l - 1] == '\t')) k[--l] = 0;
-                snprintf(rt_nexus_key, sizeof rt_nexus_key, "%s", k);
-            }
-        }
-#endif
+    while (f && fgets(line, sizeof line, f))
         for (int i = 0; i < N_OPTS; i++)
             if (ini_value(line, opts[i].key, val)) {
                 Opt *o = &opts[i];
@@ -283,7 +289,6 @@ static void ini_load(void) {
                 for (int j = 0; j < n_vals(o); j++)
                     if (!strcmp(o->vals[j], val)) o->cur = j;
             }
-    }
     if (f) fclose(f);
     for (int i = 0; i < N_OPTS; i++) opts[i].was = opts[i].cur;
 }
@@ -973,7 +978,7 @@ static void draw_mods(int sel) {
     if (!nexus_have_key()) {
         wrap_text(660, 110, 18, C_DIM,
                   "Add your own API key to sh3.ini as nexus_key=... (the API Access page on your Nexus "
-                  "account). Then reopen this screen.");
+                  "account), then reopen this screen: sh3.ini is read again each time it opens.");
     } else if (nx_count == 0 && !nx_list_done) {
         text(660, 110, 20, C_DIM, "Asking Nexus...");
     } else if (nx_count == 0) {
@@ -998,9 +1003,19 @@ static void draw_mods(int sel) {
 
 static void mods_screen(void) {
     int sel = 0, dirty = 1, last_list = -1;
+    char key_before[128];
     nx_job_done = 0;
     nx_job.err[0] = 0;
     nx_note[0] = 0;
+    /* Read sh3.ini again here: adding a key should take effect when this screen is reopened, not at the next
+     * start. A different key throws the old list away. */
+    snprintf(key_before, sizeof key_before, "%s", rt_nexus_key);
+    ini_nexus_key();
+    if (strcmp(key_before, rt_nexus_key)) {
+        nx_count = 0;
+        nx_list_done = 0;
+        nx_list_err[0] = 0;
+    }
     if (nexus_have_key() && nx_count == 0) {
         nx_list_done = 0;
         nx_list_err[0] = 0;

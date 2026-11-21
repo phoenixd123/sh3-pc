@@ -69,8 +69,8 @@ static const char *find_sub(const char *hay, size_t hn, const char *needle, size
     return NULL;
 }
 
-static int http_get(const char *url, const char *key, int (*sink)(void *, const char *, DWORD), void *ctx,
-                    long long *total, char *err, size_t errn) {
+static int http_send(const char *url, const char *key, const wchar_t *method, const char *body,
+                     int (*sink)(void *, const char *, DWORD), void *ctx, long long *total, char *err, size_t errn) {
     URL_COMPONENTS uc;
     wchar_t host[256], path[1600];
     HINTERNET ses = NULL, con = NULL, req = NULL;
@@ -90,7 +90,7 @@ static int http_get(const char *url, const char *key, int (*sink)(void *, const 
     WinHttpSetTimeouts(ses, 15000, 15000, 30000, 30000);
     con = WinHttpConnect(ses, host, uc.nPort, 0);
     if (!con) goto done;
-    req = WinHttpOpenRequest(con, L"GET", path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+    req = WinHttpOpenRequest(con, method, path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
                              uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0);
     if (!req) goto done;
     if (key && *key) {
@@ -99,7 +99,14 @@ static int http_get(const char *url, const char *key, int (*sink)(void *, const 
         WinHttpAddRequestHeaders(req, hdr, (DWORD)-1L, WINHTTP_ADDREQ_FLAG_ADD);
     }
     WinHttpAddRequestHeaders(req, L"Accept: application/json", (DWORD)-1L, WINHTTP_ADDREQ_FLAG_ADD);
-    if (!WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) goto done;
+    if (body && !WinHttpAddRequestHeaders(req, L"Content-Type: application/json", (DWORD)-1L, WINHTTP_ADDREQ_FLAG_ADD))
+        goto done;
+    {
+        DWORD blen = body ? (DWORD)strlen(body) : 0;
+        if (!WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, body ? (LPVOID)body : WINHTTP_NO_REQUEST_DATA, blen,
+                                blen, 0))
+            goto done;
+    }
     if (!WinHttpReceiveResponse(req, NULL)) goto done;
     {
         DWORD code = 0, len = sizeof code;
@@ -143,6 +150,11 @@ done:
     if (con) WinHttpCloseHandle(con);
     if (ses) WinHttpCloseHandle(ses);
     return ok;
+}
+
+static int http_get(const char *url, const char *key, int (*sink)(void *, const char *, DWORD), void *ctx,
+                    long long *total, char *err, size_t errn) {
+    return http_send(url, key, L"GET", NULL, sink, ctx, total, err, errn);
 }
 
 static int mem_sink(void *ctx, const char *d, DWORD n) { return mem_add((Mem *)ctx, d, n); }
@@ -258,30 +270,50 @@ int nexus_account(char *who, size_t n, char *err, size_t errn) {
     return !strcmp(prem, "true") ? 1 : 0;
 }
 
+static const char *array_end(const char *p, const char *stop);  /* below: shared with the file picker */
+
 int nexus_list(NexusMod *out, int max, char *err, size_t errn) {
     Mem m = {0};
+    char body[800], url[900];
+    const char *a, *aend, *p = NULL, *oe, *stop;
+    int n = 0;
     if (!nexus_have_key()) {
         snprintf(err, errn, "No API key yet: put your personal key from\nnexusmods.com/users/myaccount?tab=api "
                             "into `nexus_key=` in sh3.ini.");
         return 0;
     }
-    /* Nexus retired the v1 "every mod of a game" endpoint (it answers 404 now); latest_added.json is the one
-     * that still lists a game's mods, newest first, with the id, name and author this screen shows. */
-    if (!get_json("/v1/games/silenthill3/mods/latest_added.json", &m, err, errn)) {
+    if (max > NEXUS_MAX_MODS) max = NEXUS_MAX_MODS;
+    /* The v2 GraphQL API. The v1 endpoint that listed a game's mods was retired (it answers 404), and the one
+     * that is still there only returns the ten newest; this asks for the whole game, most endorsed first, which
+     * is the list a player wants to browse. */
+    snprintf(body, sizeof body,
+             "{\"query\":\"{ mods(filter: { gameDomainName: { value: \\\"silenthill3\\\" } }, count: %d, "
+             "sort: { endorsements: { direction: DESC } }) { nodes { modId name author } } }\"}",
+             max);
+    snprintf(url, sizeof url, "%s/v2/graphql", g_base);
+    if (!http_send(url, g_key, L"POST", body, mem_sink, &m, NULL, err, errn)) {
         mem_free(&m);
         return 0;
     }
-    int n = 0;
-    const char *p = m.p, *stop = m.p + m.n, *oe;
-    while (n < max && (p = obj_next(p, stop, &oe)) != NULL) {
+    stop = m.p + m.n;
+    a = find_sub(m.p, m.n, "\"nodes\"", 7);
+    while (a && a < stop && *a != '[') a++;
+    if (!a || a >= stop || !(aend = array_end(a, stop))) {
+        char msg[300] = "";
+        if (jstr(m.p, m.n, "message", msg, sizeof msg) && msg[0]) snprintf(err, errn, "Nexus answered: %s", msg);
+        else snprintf(err, errn, "Nexus returned no mods for Silent Hill 3.");
+        mem_free(&m);
+        return 0;
+    }
+    while (n < max && (p = obj_next(p ? p : a + 1, aend, &oe)) != NULL) {
         NexusMod *d = &out[n];
-        long id = jint(p, (size_t)(oe - p), "mod_id", 0);
+        long id = jint(p, (size_t)(oe - p), "modId", 0);
         if (!id) { p = oe; continue; }
         d->id = (int)id;
         if (!jstr(p, (size_t)(oe - p), "name", d->name, sizeof d->name) || !d->name[0])
             snprintf(d->name, sizeof d->name, "Mod %ld", id);
         if (!jstr(p, (size_t)(oe - p), "author", d->author, sizeof d->author) || !d->author[0])
-            jstr(p, (size_t)(oe - p), "uploaded_by", d->author, sizeof d->author);
+            snprintf(d->author, sizeof d->author, "%s", "-");
         n++;
         p = oe;
     }
