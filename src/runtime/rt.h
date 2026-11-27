@@ -140,6 +140,9 @@ void rt_window_hide(void);   /* out of the way while the launcher's own copy of 
 int rt_set_resolution(uint32_t w, uint32_t h);
 /* One key in sh3.ini, the rest of the file left as it is (rt_ini.c). */
 void rt_ini_set(const char *key, const char *val);
+/* The launcher's guard around the copy's own sh3.exe (watchdog.c): waits for it, Ctrl+Alt+End ends it. Returns 1
+ * when it had to be ended. */
+int rt_watch_child(void *process);
 
 /* kernel32.c */
 void rt_thread_init_main(uint32_t stack_size);

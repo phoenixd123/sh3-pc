@@ -1101,37 +1101,6 @@ static int write_machine_registry(const char *dir, char *err, size_t en) {
     return 1;
 }
 
-#ifdef _WIN32
-/* The copy's own sh3.exe runs as a separate process, so nothing in this port can answer for it: its Options screen
- * still tests every display mode Windows reports, and while it hangs there a fullscreen window leaves no way to
- * Task Manager. This process stays up for as long as the game runs, and Ctrl+Alt+End - a registered hotkey, which
- * Windows delivers here even when a hung window has the focus - ends it. */
-static void watchdog(HANDLE game) {
-    if (!RegisterHotKey(NULL, 1, MOD_CONTROL | MOD_ALT, VK_END))
-        rt_log("watchdog: Ctrl+Alt+End belongs to another program, so the game runs without it");
-    else
-        rt_log("watchdog: Ctrl+Alt+End ends the game if it stops answering");
-    const char *ms = getenv("SH3_WATCH_KILL_MS"); /* a test: end the game after this many milliseconds */
-    uint64_t kill_at = ms ? GetTickCount64() + (uint64_t)atoll(ms) : 0;
-    MSG msg;
-    for (;;) {
-        DWORD r = MsgWaitForMultipleObjects(1, &game, FALSE, 100, QS_ALLINPUT);
-        while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE))
-            if (msg.message == WM_HOTKEY && msg.wParam == 1) {
-                rt_log("watchdog: Ctrl+Alt+End, ending the game");
-                TerminateProcess(game, 0);
-                return;
-            }
-        if (r == WAIT_OBJECT_0) return; /* the game ended by itself */
-        if (kill_at && GetTickCount64() > kill_at) {
-            rt_log("watchdog: SH3_WATCH_KILL_MS, ending the game");
-            TerminateProcess(game, 0);
-            return;
-        }
-    }
-}
-#endif
-
 int rt_run_original(void) {
 #ifdef _WIN32
     char exe[700], self[700], text[1200], why[1200];
@@ -1206,7 +1175,7 @@ int rt_run_original(void) {
     rt_log("launcher: started the copy's own %s", exe);
     /* Hidden: a window that is not pumping messages while the game runs would be marked as not responding. */
     rt_window_hide();
-    watchdog(pi.hProcess);
+    rt_watch_child(pi.hProcess);
     CloseHandle(pi.hProcess);
     return 1;
 #else

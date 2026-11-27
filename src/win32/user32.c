@@ -99,9 +99,10 @@ void rt_window_hide(void) {
     SDL_PumpEvents();
 }
 
-/* A mode the player picked: the port renders at it from now on (the device reset that follows a mode change reads
- * rt_res_*, src/game/sh3.c), the window follows when it is windowed, and resolution= is rewritten so the next
- * start begins at the same size. Returns 1 when it was a different mode. */
+/* The one place a picked mode is adopted: force_mode (src/game/sh3.c) calls this from the device reset that
+ * follows a real mode change. rt_res_* follows, the window follows when it is windowed, and resolution= is
+ * rewritten so the next start begins at the same size. ChangeDisplaySettingsA deliberately does not call it: the
+ * Options screen tests every mode through that one. Returns 1 when it was a different mode. */
 int rt_set_resolution(uint32_t w, uint32_t h) {
     char res[32];
     if (!w || !h || (w == rt_res_w && h == rt_res_h)) return 0;
@@ -336,21 +337,18 @@ WINAPI(GetWindowThreadProcessId, "GetWindowThreadProcessId", 2) {
 }
 WINAPI(RegisterDeviceNotificationA, "RegisterDeviceNotificationA", 3) { return 1; }
 WINAPI(UnregisterDeviceNotification, "UnregisterDeviceNotification", 1) { return 1; }
-/* The resolution row: a mode the screen offered and the player picked becomes the port's mode - the device reset
- * that follows a mode change reads rt_res_* (src/game/sh3.c), the window follows, and resolution= is written to
- * sh3.ini so the next start begins there. Anything else the game asks for (its own default while starting, before
- * a frame has been presented) is answered and not taken, so resolution= still decides the size the port opens at.
- * WM_DISPLAYCHANGE is what the options screen waits for before it comes back: with no message it only dimmed.
- * CDS_TEST asks the question without applying anything. */
+/* Answered, never applied: this is called once for every mode the Options screen tests, so a resolution taken here
+ * would be taken again by each test and sh3.ini rewritten sixteen times. The one place that adopts a pick is the
+ * device reset the game runs after a real mode change (force_mode, src/game/sh3.c): that reset is what sizes the
+ * render target, so a mode not adopted there was never going to render at that size anyway. WM_DISPLAYCHANGE is
+ * what the options screen waits for before it comes back: with no message it only dimmed. CDS_TEST asks the
+ * question without applying anything. */
 WINAPI(ChangeDisplaySettingsA, "ChangeDisplaySettingsA", 2) {
     Sh3DisplayMode want = {0, 0, 0, 0};
     if (ARG(0) && !sh3_devmode_parse(GPTR(ARG(0)), &want)) return -2;  /* DISP_CHANGE_BADMODE */
     if (ARG(1) & 2) return 0;                                         /* CDS_TEST: the question only */
-    if (!(ARG(0) && rt_frame && sh3_mode_offered(want.w, want.h)))
-        rt_log("ChangeDisplaySettings %ux%u at %u Hz: the port keeps %ux%u", want.w, want.h, want.hz, rt_res_w,
-               rt_res_h);
-    else
-        rt_set_resolution(want.w, want.h);
+    rt_log("ChangeDisplaySettings %ux%u at %u Hz: answered, the device reset decides the size (now %ux%u)", want.w,
+           want.h, want.hz, rt_res_w, rt_res_h);
     if (wndproc) call_wndproc(HWND_MAIN, WM_DISPLAYCHANGE, 32, (rt_res_w & 0xFFFF) | (rt_res_h << 16));
     return 0;  /* DISP_CHANGE_SUCCESSFUL */
 }

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.12.2 - one owner for the resolution, and the kill tested
+
+- **One path owns the resolution pick.** 1.12.1 took an offered mode in two places: `ChangeDisplaySettingsA` and
+  the device reset the game runs after a mode change. The Options screen calls `ChangeDisplaySettingsA` once for
+  every mode it tests, so on a machine where that loop runs the pick could have changed again per test and
+  `sh3.ini` been rewritten sixteen times. `ChangeDisplaySettingsA` now only answers, as it must, and the device
+  reset is the single place that adopts the mode (`force_mode`, `src/game/sh3.c`, through `rt_set_resolution`).
+  Nothing is lost by it: the reset is what sizes the render target, so a mode not adopted there was never going to
+  render at that size.
+- **The Ctrl+Alt+End kill is tested with a stub child.** The watcher moved out of `rt_core.c` into
+  `src/runtime/watchdog.c` (`rt_watch_child`), and `build/watchdog_test.c` starts its own binary as the stub game
+  and checks all three ways out: `SH3_WATCH_KILL_MS=800` ends a child that never exits and the child is gone; a
+  `WM_HOTKEY` with id 1 - the message the registered Ctrl+Alt+End delivers - ends it too; and a child that exits
+  by itself is left alone and reported as not killed.
+- Tested: `build/watchdog_test.c` passes all three cases, with no stub process left behind; `build/modes_test.c`
+  and `build/ini_test.c` still pass; `build/wcheck.sh` compiles 28 units and links. The launcher was not clicked
+  through for this one: nothing in its menu changed, only which host function waits for the game.
+
+
 ## 1.12.1 - the resolution row switches, and the port starts in a window
 
 - **Picking a resolution switches to it, and keeps it.** The row listed sixteen modes and every pick was answered
