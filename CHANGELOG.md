@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.12.1 - the resolution row switches, and the port starts in a window
+
+- **Picking a resolution switches to it, and keeps it.** The row listed sixteen modes and every pick was answered
+  with success, but the port went on rendering at `resolution=`: `ChangeDisplaySettingsA` threw the mode away and
+  the device reset the game runs after a mode change was pinned back to the old size. The pick now becomes the
+  port's mode (`rt_set_resolution`, `src/win32/user32.c`): the reset is built at that size (`src/game/sh3.c`), a
+  windowed port resizes its window, and `resolution=` is rewritten through the new `src/runtime/rt_ini.c`, so the
+  next start begins there. Only the modes the screen was offered are taken, so the game's own default at start
+  cannot replace `resolution=`, and `resolution=` now reads up to 4096 - 2560x1920 and 3200x2400 are on the list
+  and used to be clamped back to 1280x720 on the next start.
+- **The port starts in a window again.** `fullscreen` defaults to `0` in `sh3.ini`, Options > Window and the
+  launcher's own row, so the game opens as a window at `resolution=`; `fullscreen=1` is still the desktop without
+  a border, and Alt+Enter still switches in game.
+- **The launcher can end the copy's own sh3.exe.** The retail Options freeze is inside that executable, and no
+  launcher can change another process from outside it, so the launcher now stays running while the game runs and
+  **Ctrl+Alt+End** terminates it - a registered hotkey, which Windows delivers even while a hung fullscreen window
+  has the focus. The confirm dialog says so. The port's own build needs none of this: Alt+F4 closes it.
+- `src/runtime/rt_ini.c` is the one writer for `sh3.ini` (the game's Alt+Enter, the resolution pick); it rewrites
+  only the key asked for and copies everything else back byte for byte.
+- Tested: `build/modes_test.c` passes, now including the offered-mode check the resolution pick depends on;
+  `build/ini_test.c` passes six cases (a rewrite keeps comments, `cores=3   ; three` and `nexus_key`, replaces one
+  line, appends to a file whose last line has no newline, and writes a new file); `build/wcheck.sh` compiles 27
+  units and links. In the launcher with scripted keys, the port started `window: windowed, 1280x720` with no
+  `fullscreen=` in the file, and Options > Window switched it to `window: fullscreen` with `fullscreen=1` written.
+  Not tested: the in-game resolution pick (no game files here, so the device reset it feeds was not run), and
+  Ctrl+Alt+End (it ends the retail `sh3.exe`, which this machine does not have).
+
+
 ## 1.12.0 - the Options screen comes back, and a stuck screen can be closed
 
 - **The in-game Options screen no longer sits on a dimmed frame.** Two things in the host layer were wrong. The

@@ -218,7 +218,7 @@ typedef struct {
 static Opt opts[] = {
     {"Resolution", "resolution", {"1280x720", "1920x1080", "960x720", "640x480"}, {"720p", "1080p", "4:3 (960x720)", "4:3 (640x480)"}},
 #ifndef __SWITCH__
-    {"Window", "fullscreen", {"1", "0"}, {"Fullscreen", "Window"}},
+    {"Window", "fullscreen", {"0", "1"}, {"Window", "Fullscreen"}},
 #endif
     {"Game threads", "cores", {"3", "1"}, {"Three cores", "One core"}},
     {"Widescreen", "widescreen", {"1", "0"}, {"On", "Off"}},
@@ -280,10 +280,10 @@ static int ini_nexus_key(void) {
 #endif
 
 #ifndef __SWITCH__
-/* The window follows the row: fullscreen unless the file says fullscreen=0. */
+/* The window follows the row: a window unless the file says fullscreen=1. */
 static void apply_window_opt(void) {
     Opt *o = &opts[OPT_WINDOW];
-    rt_fullscreen = o->cur < 0 ? strcmp(o->other, "0") != 0 : o->cur == 0;
+    rt_fullscreen = o->cur < 0 ? strcmp(o->other, "0") != 0 : o->cur == 1;
     rt_apply_window_mode();
 }
 #endif

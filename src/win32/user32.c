@@ -91,27 +91,31 @@ void rt_apply_window_mode(void) {
     rt_log("window: %s, %dx%d", rt_fullscreen ? "fullscreen" : "windowed", ww, wh);
 }
 
-/* Alt+Enter keeps its answer in sh3.ini: the last fullscreen= line, or one appended. Every other line stays. */
-static void fullscreen_save(void) {
-    char *lines[512], line[256], set[32];
-    int n = 0, last = -1;
-    unsigned a;
-    FILE *f = fopen("sh3.ini", "r");
-    while (f && n < 512 && fgets(line, sizeof line, f)) lines[n++] = strdup(line);
-    if (f) fclose(f);
-    for (int i = 0; i < n; i++)
-        if (sscanf(lines[i], " fullscreen = %u", &a) == 1) last = i;
-    snprintf(set, sizeof set, "fullscreen=%d\n", rt_fullscreen);
-    if (last >= 0) { free(lines[last]); lines[last] = strdup(set); }
-    else if (n < 512) lines[n++] = strdup(set);
-    if (!(f = fopen("sh3.ini", "w"))) {
-        for (int i = 0; i < n; i++) free(lines[i]);
-        rt_log("window: can't write sh3.ini");
-        return;
-    }
-    for (int i = 0; i < n; i++) { fputs(lines[i], f); free(lines[i]); }
-    fclose(f);
+/* Hidden while the launcher's own copy of the game runs in front of it (rt_core.c): a window that is not pumping
+ * messages then looks like one that has stopped answering. */
+void rt_window_hide(void) {
+    if (!rt_window) return;
+    SDL_HideWindow(rt_window);
+    SDL_PumpEvents();
 }
+
+/* A mode the player picked: the port renders at it from now on (the device reset that follows a mode change reads
+ * rt_res_*, src/game/sh3.c), the window follows when it is windowed, and resolution= is rewritten so the next
+ * start begins at the same size. Returns 1 when it was a different mode. */
+int rt_set_resolution(uint32_t w, uint32_t h) {
+    char res[32];
+    if (!w || !h || (w == rt_res_w && h == rt_res_h)) return 0;
+    rt_res_w = w;
+    rt_res_h = h;
+    snprintf(res, sizeof res, "%ux%u", w, h);
+    rt_ini_set("resolution", res);
+    rt_apply_window_mode();
+    rt_log("resolution: %s, saved to sh3.ini", res);
+    return 1;
+}
+
+/* Alt+Enter keeps its answer in sh3.ini: the last fullscreen= line, or one appended. Every other line stays. */
+static void fullscreen_save(void) { rt_ini_set("fullscreen", rt_fullscreen ? "1" : "0"); }
 
 void rt_pump_events(void) {
     SDL_Event e;
@@ -332,18 +336,22 @@ WINAPI(GetWindowThreadProcessId, "GetWindowThreadProcessId", 2) {
 }
 WINAPI(RegisterDeviceNotificationA, "RegisterDeviceNotificationA", 3) { return 1; }
 WINAPI(UnregisterDeviceNotification, "UnregisterDeviceNotification", 1) { return 1; }
-/* The port renders at resolution= in sh3.ini whatever the game asks for (src/game/sh3.c pins the device), so
- * a change is accepted and reported as the port's own mode. A real ChangeDisplaySettings also tells the window
- * with WM_DISPLAYCHANGE, and the options screen waits for that before it comes back: with no message the screen
- * only dimmed. CDS_TEST asks the question without applying anything, so it gets the answer and no message. */
+/* The resolution row: a mode the screen offered and the player picked becomes the port's mode - the device reset
+ * that follows a mode change reads rt_res_* (src/game/sh3.c), the window follows, and resolution= is written to
+ * sh3.ini so the next start begins there. Anything else the game asks for (its own default while starting, before
+ * a frame has been presented) is answered and not taken, so resolution= still decides the size the port opens at.
+ * WM_DISPLAYCHANGE is what the options screen waits for before it comes back: with no message it only dimmed.
+ * CDS_TEST asks the question without applying anything. */
 WINAPI(ChangeDisplaySettingsA, "ChangeDisplaySettingsA", 2) {
     Sh3DisplayMode want = {0, 0, 0, 0};
     if (ARG(0) && !sh3_devmode_parse(GPTR(ARG(0)), &want)) return -2;  /* DISP_CHANGE_BADMODE */
-    if (!(ARG(1) & 2) && wndproc) {                                    /* CDS_TEST */
+    if (ARG(1) & 2) return 0;                                         /* CDS_TEST: the question only */
+    if (!(ARG(0) && rt_frame && sh3_mode_offered(want.w, want.h)))
         rt_log("ChangeDisplaySettings %ux%u at %u Hz: the port keeps %ux%u", want.w, want.h, want.hz, rt_res_w,
                rt_res_h);
-        call_wndproc(HWND_MAIN, WM_DISPLAYCHANGE, 32, (rt_res_w & 0xFFFF) | (rt_res_h << 16));
-    }
+    else
+        rt_set_resolution(want.w, want.h);
+    if (wndproc) call_wndproc(HWND_MAIN, WM_DISPLAYCHANGE, 32, (rt_res_w & 0xFFFF) | (rt_res_h << 16));
     return 0;  /* DISP_CHANGE_SUCCESSFUL */
 }
 WINAPI(SystemParametersInfoA, "SystemParametersInfoA", 4) { return 1; }

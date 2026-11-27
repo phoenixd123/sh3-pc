@@ -39,6 +39,15 @@ static inline Sh3DisplayMode sh3_display_mode(int i, uint32_t cur_w, uint32_t cu
     return (Sh3DisplayMode){0, 0, 0, 0};
 }
 
+/* Whether w x h is one of the modes the screen was offered. Only those are taken as a new resolution when the
+ * game asks the device for one, so a reset that repeats the game's own default cannot quietly replace
+ * resolution= in sh3.ini. */
+static inline int sh3_mode_offered(uint32_t w, uint32_t h) {
+    for (int k = 0; k < SH3_FIXED_MODES; k++)
+        if (sh3_fixed_modes[k].w == w && sh3_fixed_modes[k].h == h) return 1;
+    return 0;
+}
+
 /* DEVMODEA, the fields the game and user32.c touch: dmSize @36, dmFields @40, dmBitsPerPel @104,
  * dmPelsWidth @108, dmPelsHeight @112, dmDisplayFrequency @120. */
 #define SH3_DEVMODE_SIZE 156

@@ -135,6 +135,11 @@ void rt_pump_events(void);
 void rt_window_open(void);
 extern int rt_fullscreen;    /* fullscreen= in sh3.ini, Options > Window, Alt+Enter in game */
 void rt_apply_window_mode(void);
+void rt_window_hide(void);   /* out of the way while the launcher's own copy of the game runs */
+/* A resolution the Options screen picked (sh3.c, user32.c): rt_res_* and resolution= both follow it. */
+int rt_set_resolution(uint32_t w, uint32_t h);
+/* One key in sh3.ini, the rest of the file left as it is (rt_ini.c). */
+void rt_ini_set(const char *key, const char *val);
 
 /* kernel32.c */
 void rt_thread_init_main(uint32_t stack_size);

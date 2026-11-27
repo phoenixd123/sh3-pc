@@ -2,6 +2,7 @@
  * recompiler (--exclude-manual), which then leaves these functions out of src/recomp/gen. */
 #include "../runtime/rt.h"
 #include "../runtime/host.h"
+#include "../runtime/display_modes.h"
 
 /* The static CRT's memcpy (memmove semantics) and its second copy: their jump tables sit past the end
  * the disassembler finds and are indexed backwards, so the lifted copies cannot follow them. */
@@ -19,7 +20,16 @@ void sub_0066F9C0(void) { crt_memmove(); }
  * whatever disp.ini or the options ask for. 0x72C780/84 is the mode the game wants, 0x72C788/8C the one it
  * lays the 2D out in; both feed D3DPRESENT_PARAMETERS at 0x72C664. */
 extern uint32_t rt_res_w, rt_res_h;
+static uint32_t want_w, want_h;  /* the mode the game last asked the device for */
 static void force_mode(void) {
+    uint32_t w = MEM32(0x72C780), h = MEM32(0x72C784);
+    /* The Options screen writes the mode the player picked to the wanted mode and then resets the device: a wanted
+     * mode that changed, and that the screen offered, is that pick - it becomes the port's mode, saved to sh3.ini,
+     * instead of being overwritten. The game's own default at start is not taken, because the device is created
+     * before a frame has been presented. */
+    if (rt_frame && (w != want_w || h != want_h) && sh3_mode_offered(w, h)) rt_set_resolution(w, h);
+    want_w = rt_res_w;
+    want_h = rt_res_h;
     MEM32(0x72C780) = MEM32(0x72C788) = rt_res_w;
     MEM32(0x72C784) = MEM32(0x72C78C) = rt_res_h;
 }

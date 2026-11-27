@@ -14,9 +14,10 @@ corrected; "open" means it needs the game running to diagnose, and what that tak
 | `mod.ini` `priority=` ignored | Two causes: `ini_get` used one buffer for both the file path and the value it read, so every key after the first lost its path; and every mod was given a unique sort key, so the priority tiebreak never ran even once that was fixed. | Separate buffers, and unlisted mods share one order (`INT_MAX`) so `priority=` decides between them. |
 | Mod files invisible to attribute checks | A mod replacing a file was opened from the mod but `GetFileAttributesA` still reported the game's copy, so a size probe saw the wrong file. | The attribute bridge consults the mod loader too. |
 | The Options screen sat on a dimmed frame | Two host-layer answers were missing: `EnumDisplaySettingsA` reported one mode where the screen builds its resolution row from that list, and `ChangeDisplaySettingsA` returned success without the `WM_DISPLAYCHANGE` a real mode change sends, which the screen waits for. The retail game freezes on the same list for the opposite reason: it tests all 1100+ modes a modern driver reports. | Sixteen 4:3 modes with the port's resolution first (`src/runtime/display_modes.h`), and the change is answered with the message. |
+| Picking one of the sixteen resolutions did nothing | The list was right but no pick was taken: `ChangeDisplaySettingsA` answered success and kept the port's size, and the device reset the game runs after a mode change was pinned back to `rt_res_*`, so every mode in the row was a no-op. | `rt_set_resolution` (`user32.c`) makes the pick the port's mode, the device reset is built at that size (`src/game/sh3.c`), a windowed window is resized, and `resolution=` is rewritten (`src/runtime/rt_ini.c`). Only offered modes are taken, and `resolution=` now reads up to 4096. |
 | A hung screen could not be closed | Only the game's own Quit left the port, so a stuck menu left logging off Windows as the way out. | Alt+F4 / Alt+Q, and closing the window, ask the game to quit; if it does not in two seconds the port stops itself (`user32.c`). |
 | Install a mod and Back were off-screen | The Windows Options rows began at y=190 in 56 px steps with 36 px text, so the twelfth row sat at 806 on a 720 px canvas and was clipped. | 30 px text in 42 px steps from 150: thirteen rows end at 654. |
-| 1080p was scaled down | The window was created 1280x720 and never resized; `resolution=` only set the render size, so the letterbox blit shrank 1080p into a 720p window. | Fullscreen desktop by default, Alt+Enter, Options > Window, and a window at `resolution=` when windowed. |
+| 1080p was scaled down | The window was created 1280x720 and never resized; `resolution=` only set the render size, so the letterbox blit shrank 1080p into a 720p window. | The window is created at `resolution=` and follows it, `fullscreen=1` is a borderless desktop, and Alt+Enter / Options > Window switch. |
 
 ## Open
 
@@ -101,3 +102,17 @@ Not attempted here because there are no game files: a table patch that is never 
 guess, and the assets cannot be shipped. The local pipeline is in place instead: `tools/ps2_outfits.py` builds the
 archive mod from models the player converts, and `patches/*.patch` carries the table edits into the build (see
 "PS2-exclusive costumes" in `MODDING.md`).
+
+### 7. The copy's own sh3.exe still hangs on Options
+
+The launcher-only build plays an imported Full-Rip by starting that folder's own 2003 `sh3.exe`. That executable
+tests every display mode Windows reports before its Options screen appears, and on a modern PC (1100+ modes) it
+hangs there. Nothing the launcher does reaches inside another process: the hotkey it registers (Ctrl+Alt+End)
+ends the game instead of fixing the screen, and the `sh3.ini` settings this port documents are the port's, not
+that executable's.
+
+**What a fix needs:** code loaded into that process, which is what the community fixes are (Steam006's PC Fix,
+Silent Hill 3: Rebirth, the hex edit that cuts the list to sixteen). Injecting an unsigned DLL into someone's
+game is what antivirus software flags, and it cannot be tested here without the game, so this project takes the
+route it can stand behind: it recompiles that executable, and the recompiled port has the sixteen-mode list and
+the `WM_DISPLAYCHANGE` answer the 2003 build lacks (`docs/BUILD-WINDOWS.md`).

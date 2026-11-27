@@ -8,7 +8,7 @@
 </div>
 <h1 align=center>Silent Hill 3 — PC (and Switch)</h1>
 
-<p align=center><b>1.12.0</b> — ported to PC by <b>phoenixd123</b></p>
+<p align=center><b>1.12.1</b> — ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
@@ -98,7 +98,11 @@ folder inside that holds `sh3.exe` and `data/` the game; dropping the zip on the
 without `sh3.exe` is still treated as a mod. Importing is only the unpack: the game code still has to be
 recompiled from that copy, as `docs/BUILD-WINDOWS.md` does, and the 2003 game is still Konami's. In the
 launcher-only build, **Play** then offers to start that copy's own `sh3.exe` (the download's NoCD executable),
-which is how the imported download runs without a recompiled build; a full build runs the port instead.
+which is how the imported download runs without a recompiled build; a full build runs the port instead. That
+copy is the 2003 executable, so its own Options screen can still hang on the display-mode list, and nothing the
+launcher does can change that from outside the process: it stays running for as long as the game runs, and
+**Ctrl+Alt+End** ends it, which is the way out of a hung fullscreen window. A build compiled from that copy has
+this port's Options fix instead.
 
 ## Features
 
@@ -106,11 +110,12 @@ which is how the imported download runs without a recompiled build; a full build
 - **Launcher**: it asks for the game folder once and remembers it, then Play and Options before the game; Options changes the resolution and the game threads in `sh3.ini`
   on the console, and on Windows its **Game folder** and **Game disc or file** rows point the port at another
   install: the folder browser takes the install folder, the open-file dialog takes `sh3.exe` or a disc image.
-- **Fullscreen or a window**: it starts on the desktop without a border; **Alt+Enter** switches, and
-  **Options > Window** (`fullscreen=1`/`0`) sets what it starts in. **Alt+F4** closes it from any screen,
-  which a hung menu no longer blocks: the game is asked to quit and stopped if it does not. The game's own
-  Options screen is given sixteen display modes and the `WM_DISPLAYCHANGE` it waits for, so it comes back
-  instead of staying dimmed.
+- **A window by default, fullscreen when asked**: it starts as a window at `resolution=`; **Alt+Enter**
+  switches, and **Options > Window** (`fullscreen=1`/`0`) sets what it starts in. Fullscreen is the desktop
+  without a border. **Alt+F4** closes it from any screen, which a hung menu no longer blocks: the game is asked
+  to quit and stopped if it does not. The game's own Options screen is given sixteen display modes and the
+  `WM_DISPLAYCHANGE` it waits for, so it comes back instead of staying dimmed, and picking one of those modes
+  switches the port to it and keeps it in `sh3.ini`.
 - **Mods in one click**: Options > **Install a mod** takes a `.zip`, unpacks it into `mods/` under the game folder
   and loads it without a restart; dropping the archive on the executable installs it and starts the game. The layout
   is worked out from the archive itself: a `files/` folder, a wrapper folder, or loose `data/...`.
@@ -332,7 +337,7 @@ preset the mode was showing.
 | Setting | Effect |
 | --- | --- |
 | `resolution=1280x720` | the default; `1920x1080` for docked play, `960x720` or `640x480` for the original 4:3 |
-| `fullscreen=1` | the desktop without a border (default); `0` opens a window at `resolution=`. Alt+Enter switches in game, Options > Window sets it |
+| `fullscreen=0` | a window at `resolution=` (default); `1` is the desktop without a border. Alt+Enter switches in game, Options > Window sets it |
 | `cores=1` | every game thread on one core, a fallback if the audio misbehaves |
 | `log=1` | also write `sh3.log` next to the executable, for bug reports (off by default on the Switch, where it costs an SD card write per line). Crashes always go to `sh3-crash.log` |
 | `trace=1` | with `log=1`, log every Windows call the game makes (very slow) |

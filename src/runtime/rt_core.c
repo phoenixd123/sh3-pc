@@ -50,7 +50,7 @@ int rt_aniso = 8;        /* aniso=1 in sh3.ini turns anisotropic filtering off *
 int rt_ws = 1;char rt_nexus_key[128];   /* nexus_key= in sh3.ini: the player's own Nexus API key */
            /* widescreen=0 in sh3.ini keeps the 4:3 framing */
 int rt_filter;           /* filter=1 CRT, 2 VHS in sh3.ini; 0 (the default) blits as before */
-int rt_fullscreen = 1;   /* fullscreen=0 in sh3.ini, or Options > Window: a window, not the desktop */
+int rt_fullscreen = 0;   /* a window, unless fullscreen=1 in sh3.ini, Options > Window or Alt+Enter */
 int rt_camera;           /* camera= in sh3.ini and F2 in game (src/d3d8/camera.c) */
 int rt_cam_custom;       /* cam_forward=/cam_right=/cam_up= in sh3.ini replace the preset's offsets */
 float rt_cam_forward, rt_cam_right, rt_cam_up;
@@ -506,7 +506,7 @@ static void read_ini(void) {
     unsigned a, b, cores = 3;
     float f;
     while (ini && fgets(line, sizeof line, ini)) {
-        if (sscanf(line, " resolution = %ux%u", &a, &b) == 2 && a >= 320 && b >= 240 && a <= 1920 && b <= 1440)
+        if (sscanf(line, " resolution = %ux%u", &a, &b) == 2 && a >= 320 && b >= 240 && a <= 4096 && b <= 4096)
             rt_res_w = a, rt_res_h = b;
         if (sscanf(line, " cores = %u", &a) == 1) cores = a;
         if (sscanf(line, " trace = %u", &a) == 1) rt_trace = a;
@@ -1101,6 +1101,37 @@ static int write_machine_registry(const char *dir, char *err, size_t en) {
     return 1;
 }
 
+#ifdef _WIN32
+/* The copy's own sh3.exe runs as a separate process, so nothing in this port can answer for it: its Options screen
+ * still tests every display mode Windows reports, and while it hangs there a fullscreen window leaves no way to
+ * Task Manager. This process stays up for as long as the game runs, and Ctrl+Alt+End - a registered hotkey, which
+ * Windows delivers here even when a hung window has the focus - ends it. */
+static void watchdog(HANDLE game) {
+    if (!RegisterHotKey(NULL, 1, MOD_CONTROL | MOD_ALT, VK_END))
+        rt_log("watchdog: Ctrl+Alt+End belongs to another program, so the game runs without it");
+    else
+        rt_log("watchdog: Ctrl+Alt+End ends the game if it stops answering");
+    const char *ms = getenv("SH3_WATCH_KILL_MS"); /* a test: end the game after this many milliseconds */
+    uint64_t kill_at = ms ? GetTickCount64() + (uint64_t)atoll(ms) : 0;
+    MSG msg;
+    for (;;) {
+        DWORD r = MsgWaitForMultipleObjects(1, &game, FALSE, 100, QS_ALLINPUT);
+        while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE))
+            if (msg.message == WM_HOTKEY && msg.wParam == 1) {
+                rt_log("watchdog: Ctrl+Alt+End, ending the game");
+                TerminateProcess(game, 0);
+                return;
+            }
+        if (r == WAIT_OBJECT_0) return; /* the game ended by itself */
+        if (kill_at && GetTickCount64() > kill_at) {
+            rt_log("watchdog: SH3_WATCH_KILL_MS, ending the game");
+            TerminateProcess(game, 0);
+            return;
+        }
+    }
+}
+#endif
+
 int rt_run_original(void) {
 #ifdef _WIN32
     char exe[700], self[700], text[1200], why[1200];
@@ -1157,7 +1188,9 @@ int rt_run_original(void) {
     }
     snprintf(text, sizeof text,
              "This launcher has no recompiled game code, so it cannot start the port.\n\n"
-             "Start the game's own sh3.exe in\n%s instead?", rt_game_dir);
+             "Start the game's own sh3.exe in\n%s instead?\n\n"
+             "If it stops answering (its Options screen tests every display mode Windows reports), press "
+             "Ctrl+Alt+End: this window stays open to end it.", rt_game_dir);
     if (!win_confirm("Silent Hill 3", text)) return 0;
     memset(&si, 0, sizeof si);
     si.cb = sizeof si;
@@ -1170,8 +1203,11 @@ int rt_run_original(void) {
         return 0;
     }
     CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
     rt_log("launcher: started the copy's own %s", exe);
+    /* Hidden: a window that is not pumping messages while the game runs would be marked as not responding. */
+    rt_window_hide();
+    watchdog(pi.hProcess);
+    CloseHandle(pi.hProcess);
     return 1;
 #else
     return 0;
