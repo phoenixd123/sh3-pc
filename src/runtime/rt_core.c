@@ -50,6 +50,7 @@ int rt_aniso = 8;        /* aniso=1 in sh3.ini turns anisotropic filtering off *
 int rt_ws = 1;char rt_nexus_key[128];   /* nexus_key= in sh3.ini: the player's own Nexus API key */
            /* widescreen=0 in sh3.ini keeps the 4:3 framing */
 int rt_filter;           /* filter=1 CRT, 2 VHS in sh3.ini; 0 (the default) blits as before */
+int rt_fullscreen = 1;   /* fullscreen=0 in sh3.ini, or Options > Window: a window, not the desktop */
 int rt_camera;           /* camera= in sh3.ini and F2 in game (src/d3d8/camera.c) */
 int rt_cam_custom;       /* cam_forward=/cam_right=/cam_up= in sh3.ini replace the preset's offsets */
 float rt_cam_forward, rt_cam_right, rt_cam_up;
@@ -512,6 +513,7 @@ static void read_ini(void) {
         if (sscanf(line, " hd = %u", &a) == 1) rt_hd_textures = a != 0;
         if (sscanf(line, " aniso = %u", &a) == 1) rt_aniso = a > 16 ? 16 : a < 1 ? 1 : a;
         if (sscanf(line, " widescreen = %u", &a) == 1) rt_ws = a != 0;
+        if (sscanf(line, " fullscreen = %u", &a) == 1) rt_fullscreen = a != 0;
         if (sscanf(line, " filter = %u", &a) == 1) rt_filter = a > 2 ? 2 : a;
         if (sscanf(line, " camera = %31s", word) == 1) {
             if (!strcmp(word, "ots") || !strcmp(word, "shoulder") || !strcmp(word, "1")) rt_camera = 1;

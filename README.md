@@ -106,6 +106,11 @@ which is how the imported download runs without a recompiled build; a full build
 - **Launcher**: it asks for the game folder once and remembers it, then Play and Options before the game; Options changes the resolution and the game threads in `sh3.ini`
   on the console, and on Windows its **Game folder** and **Game disc or file** rows point the port at another
   install: the folder browser takes the install folder, the open-file dialog takes `sh3.exe` or a disc image.
+- **Fullscreen or a window**: it starts on the desktop without a border; **Alt+Enter** switches, and
+  **Options > Window** (`fullscreen=1`/`0`) sets what it starts in. **Alt+F4** closes it from any screen,
+  which a hung menu no longer blocks: the game is asked to quit and stopped if it does not. The game's own
+  Options screen is given sixteen display modes and the `WM_DISPLAYCHANGE` it waits for, so it comes back
+  instead of staying dimmed.
 - **Mods in one click**: Options > **Install a mod** takes a `.zip`, unpacks it into `mods/` under the game folder
   and loads it without a restart; dropping the archive on the executable installs it and starts the game. The layout
   is worked out from the archive itself: a `files/` folder, a wrapper folder, or loose `data/...`.
@@ -258,7 +263,8 @@ Saves, settings and the shader cache are written next to the NRO.
 
 Laid out as in sh2-nx; change them in Options > Button Config. A `savedata/key.ini` saved by an older version keeps
 its old layout: delete it to get this one. With a keyboard on PC: W A S D and Q E
-to move and turn, Space for action, Return / Escape to confirm / cancel.
+to move and turn, Space for action, Return / Escape to confirm / cancel. Alt+Enter switches fullscreen and a
+window; Alt+F4 (or Alt+Q) closes the port from any screen.
 
 ## Freecam
 
@@ -326,6 +332,7 @@ preset the mode was showing.
 | Setting | Effect |
 | --- | --- |
 | `resolution=1280x720` | the default; `1920x1080` for docked play, `960x720` or `640x480` for the original 4:3 |
+| `fullscreen=1` | the desktop without a border (default); `0` opens a window at `resolution=`. Alt+Enter switches in game, Options > Window sets it |
 | `cores=1` | every game thread on one core, a fallback if the audio misbehaves |
 | `log=1` | also write `sh3.log` next to the executable, for bug reports (off by default on the Switch, where it costs an SD card write per line). Crashes always go to `sh3-crash.log` |
 | `trace=1` | with `log=1`, log every Windows call the game makes (very slow) |

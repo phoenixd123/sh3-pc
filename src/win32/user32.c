@@ -2,6 +2,7 @@
 #include "../runtime/rt.h"
 #include "../d3d8/freecam.h"
 #include "../d3d8/camera.h"
+#include "../runtime/display_modes.h"
 #include <SDL2/SDL.h>
 #include <ctype.h>
 
@@ -63,15 +64,77 @@ int rt_format(char *out, size_t n, const char *fmt, uint32_t args) {
 
 #define HWND_MAIN 0x00010001u
 #define WM_QUIT 0x12
+#define WM_DISPLAYCHANGE 0x007E
 
 SDL_Window *rt_window;
 static uint32_t wndproc;
 static int quit_posted;
+static Uint64 quit_at;  /* a close the game did not act on: the port stops itself after this */
+extern uint32_t rt_res_w, rt_res_h;
+
+/* The window follows rt_fullscreen: the desktop without a border, or a window at the render size. It used to be
+ * a 1280x720 window whatever resolution= said, so on a 1080p desktop everything the resolution row asked for
+ * was scaled back down into 720p. */
+void rt_apply_window_mode(void) {
+    if (!rt_window) return;
+    if (rt_fullscreen) SDL_SetWindowFullscreen(rt_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    else {
+        SDL_DisplayMode dm;
+        int w = (int)rt_res_w, h = (int)rt_res_h;
+        SDL_SetWindowFullscreen(rt_window, 0);
+        if (!SDL_GetCurrentDisplayMode(0, &dm) && (w > dm.w || h > dm.h)) w = dm.w, h = dm.h;
+        SDL_SetWindowSize(rt_window, w, h);
+        SDL_SetWindowPosition(rt_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    }
+    int ww = 0, wh = 0;
+    SDL_GL_GetDrawableSize(rt_window, &ww, &wh);  /* not the window's size on a scaled or high-DPI desktop */
+    rt_log("window: %s, %dx%d", rt_fullscreen ? "fullscreen" : "windowed", ww, wh);
+}
+
+/* Alt+Enter keeps its answer in sh3.ini: the last fullscreen= line, or one appended. Every other line stays. */
+static void fullscreen_save(void) {
+    char *lines[512], line[256], set[32];
+    int n = 0, last = -1;
+    unsigned a;
+    FILE *f = fopen("sh3.ini", "r");
+    while (f && n < 512 && fgets(line, sizeof line, f)) lines[n++] = strdup(line);
+    if (f) fclose(f);
+    for (int i = 0; i < n; i++)
+        if (sscanf(lines[i], " fullscreen = %u", &a) == 1) last = i;
+    snprintf(set, sizeof set, "fullscreen=%d\n", rt_fullscreen);
+    if (last >= 0) { free(lines[last]); lines[last] = strdup(set); }
+    else if (n < 512) lines[n++] = strdup(set);
+    if (!(f = fopen("sh3.ini", "w"))) {
+        for (int i = 0; i < n; i++) free(lines[i]);
+        rt_log("window: can't write sh3.ini");
+        return;
+    }
+    for (int i = 0; i < n; i++) { fputs(lines[i], f); free(lines[i]); }
+    fclose(f);
+}
 
 void rt_pump_events(void) {
     SDL_Event e;
+    if (quit_at && SDL_GetTicks64() > quit_at) {
+        rt_log("the game did not quit in time: stopping it");
+        exit(0);
+    }
     while (SDL_PollEvent(&e)) {
-        if (e.type == SDL_QUIT) { rt_log("window closed"); quit_posted = 1; }
+        if (e.type == SDL_QUIT) { rt_log("window closed"); quit_posted = 1; quit_at = SDL_GetTicks64() + 2000; }
+        /* Whatever screen the game is on, these two are answered here: Alt+F4 (or Alt+Q) closes the port, and a
+         * game that does not act on the WM_QUIT within two seconds is stopped anyway. A hung options screen used
+         * to leave no way out but logging off Windows. Alt+Enter switches fullscreen and window. */
+        else if (e.type == SDL_KEYDOWN && (e.key.keysym.mod & KMOD_ALT) &&
+                 (e.key.keysym.sym == SDLK_F4 || e.key.keysym.sym == SDLK_q)) {
+            rt_log("Alt+%s: closing", e.key.keysym.sym == SDLK_F4 ? "F4" : "Q");
+            quit_posted = 1;
+            quit_at = SDL_GetTicks64() + 2000;
+        }
+        else if (e.type == SDL_KEYDOWN && (e.key.keysym.mod & KMOD_ALT) && e.key.keysym.sym == SDLK_RETURN) {
+            rt_fullscreen = !rt_fullscreen;
+            rt_apply_window_mode();
+            fullscreen_save();
+        }
         else if (e.type == SDL_KEYDOWN) {
             if (e.key.keysym.sym == SDLK_F12) rt_shot_request = 1;
             else if (e.key.repeat) {}
@@ -115,6 +178,7 @@ void rt_window_open(void) {
                                      SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
                                          (getenv("SH3_KEYS") && !getenv("SH3_SHOW") ? SDL_WINDOW_HIDDEN : 0));
         if (!rt_window) rt_fatal("SDL_CreateWindow: %s", SDL_GetError());
+        rt_apply_window_mode();
     }
 }
 WINAPI(CreateWindowExA, "CreateWindowExA", 12) {
@@ -268,7 +332,20 @@ WINAPI(GetWindowThreadProcessId, "GetWindowThreadProcessId", 2) {
 }
 WINAPI(RegisterDeviceNotificationA, "RegisterDeviceNotificationA", 3) { return 1; }
 WINAPI(UnregisterDeviceNotification, "UnregisterDeviceNotification", 1) { return 1; }
-WINAPI(ChangeDisplaySettingsA, "ChangeDisplaySettingsA", 2) { return 0; }
+/* The port renders at resolution= in sh3.ini whatever the game asks for (src/game/sh3.c pins the device), so
+ * a change is accepted and reported as the port's own mode. A real ChangeDisplaySettings also tells the window
+ * with WM_DISPLAYCHANGE, and the options screen waits for that before it comes back: with no message the screen
+ * only dimmed. CDS_TEST asks the question without applying anything, so it gets the answer and no message. */
+WINAPI(ChangeDisplaySettingsA, "ChangeDisplaySettingsA", 2) {
+    Sh3DisplayMode want = {0, 0, 0, 0};
+    if (ARG(0) && !sh3_devmode_parse(GPTR(ARG(0)), &want)) return -2;  /* DISP_CHANGE_BADMODE */
+    if (!(ARG(1) & 2) && wndproc) {                                    /* CDS_TEST */
+        rt_log("ChangeDisplaySettings %ux%u at %u Hz: the port keeps %ux%u", want.w, want.h, want.hz, rt_res_w,
+               rt_res_h);
+        call_wndproc(HWND_MAIN, WM_DISPLAYCHANGE, 32, (rt_res_w & 0xFFFF) | (rt_res_h << 16));
+    }
+    return 0;  /* DISP_CHANGE_SUCCESSFUL */
+}
 WINAPI(SystemParametersInfoA, "SystemParametersInfoA", 4) { return 1; }
 WINAPI(ClientToScreen, "ClientToScreen", 2) { return 1; }
 WINAPI(ScreenToClient, "ScreenToClient", 2) { return 1; }
@@ -295,13 +372,13 @@ WINAPI(CallWindowProcA, "CallWindowProcA", 5) {
     uint32_t a[4] = {ARG(1), ARG(2), ARG(3), ARG(4)};
     return guest_call(ARG(0), 4, a, 1);
 }
-/* DEVMODEA: dmBitsPerPel @104, dmPelsWidth @108, dmPelsHeight @112, dmDisplayFrequency @120. */
+/* The list the game's Options screen builds its resolution row from (src/runtime/display_modes.h): sixteen
+ * modes with the port's own resolution first, not the 1100+ a modern driver reports - testing every one of
+ * those before the screen appears is the options-menu freeze. */
 WINAPI(EnumDisplaySettingsA, "EnumDisplaySettingsA", 3) {
-    if (ARG(1) != 0xFFFFFFFFu && ARG(1) != 0xFFFFFFFEu && ARG(1) > 0) return 0;  /* one mode: the screen's */
-    uint32_t m = ARG(2);
-    MEM32(m + 104) = 32;
-    MEM32(m + 108) = rt_res_w;
-    MEM32(m + 112) = rt_res_h;
-    MEM32(m + 120) = 60;
+    uint32_t i = ARG(1);
+    if (i == 0xFFFFFFFFu || i == 0xFFFFFFFEu) i = 0;  /* ENUM_CURRENT_SETTINGS, ENUM_REGISTRY_SETTINGS */
+    if (i >= SH3_MODE_COUNT) return 0;
+    sh3_devmode_fill(GPTR(ARG(2)), sh3_display_mode((int)i, rt_res_w, rt_res_h));
     return 1;
 }

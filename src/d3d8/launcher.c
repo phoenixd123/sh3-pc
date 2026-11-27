@@ -217,6 +217,9 @@ typedef struct {
 
 static Opt opts[] = {
     {"Resolution", "resolution", {"1280x720", "1920x1080", "960x720", "640x480"}, {"720p", "1080p", "4:3 (960x720)", "4:3 (640x480)"}},
+#ifndef __SWITCH__
+    {"Window", "fullscreen", {"1", "0"}, {"Fullscreen", "Window"}},
+#endif
     {"Game threads", "cores", {"3", "1"}, {"Three cores", "One core"}},
     {"Widescreen", "widescreen", {"1", "0"}, {"On", "Off"}},
     {"Filter", "filter", {"0", "1", "2"}, {"Off", "CRT", "VHS"}},
@@ -226,6 +229,9 @@ static Opt opts[] = {
 #endif
 };
 #define N_OPTS (int)(sizeof opts / sizeof *opts)
+#ifndef __SWITCH__
+#define OPT_WINDOW 1  /* the row after Resolution */
+#endif
 #ifdef _WIN32
 #define OPT_AUTOUPDATE (N_OPTS - 1)  /* the row above: checked when the launcher starts */
 #endif
@@ -273,6 +279,15 @@ static int ini_nexus_key(void) {
 }
 #endif
 
+#ifndef __SWITCH__
+/* The window follows the row: fullscreen unless the file says fullscreen=0. */
+static void apply_window_opt(void) {
+    Opt *o = &opts[OPT_WINDOW];
+    rt_fullscreen = o->cur < 0 ? strcmp(o->other, "0") != 0 : o->cur == 0;
+    rt_apply_window_mode();
+}
+#endif
+
 static void ini_load(void) {
     FILE *f = fopen("sh3.ini", "r");
     char line[256], val[32];
@@ -291,6 +306,9 @@ static void ini_load(void) {
             }
     if (f) fclose(f);
     for (int i = 0; i < N_OPTS; i++) opts[i].was = opts[i].cur;
+#ifndef __SWITCH__
+    apply_window_opt();
+#endif
 }
 
 /* Rewrites the changed keys in place (the last line that sets each, as that's the one the game ends up
@@ -454,7 +472,7 @@ static void draw_menu(int sel) {
     if (upd_state == 3) text_c(700, 22, C_SEL, upd_banner);
     else
 #endif
-    text_c(700, 22, C_DIM, "A: select    M: mods    B: back");
+    text_c(700, 22, C_DIM, "Enter: select    M: mods    Esc: back");
 }
 
 /* ---- credits ---- */
@@ -611,41 +629,44 @@ static void path_text(int y, int x_right, int size, uint32_t color, const char *
 static void draw_options(int sel) {
     for (int i = 0; i < CW * CH; i++) canvas[i] = C_BG;
     glyph_track = 0;
-    text_c(110, 56, C_TEXT, "Options");
+    text_c(96, 46, C_TEXT, "Options");
+    /* 13 rows on Windows (7 settings, five folder rows, Back): 30 px text in 42 px steps from 150, so the last
+     * lands at 654. At the old 36 px text and 56 px steps from 190 they reached 806, and Install a mod and Back
+     * were drawn past the 720 px canvas - unreachable and invisible. */
     for (int i = 0; i < N_ROWS; i++) {
-        int y = 190 + i * 56;
+        int y = 150 + i * 42;
         uint32_t c = i == sel ? C_SEL : C_TEXT;
-        if (i == ROW_BACK) { text_c(y + 20, 36, c, "Back"); continue; }
+        if (i == ROW_BACK) { text_c(y + 16, 30, c, "Back"); continue; }
 #ifdef _WIN32
         if (i == ROW_FOLDER) {
-            text(140, y, 36, c, "Game folder");
+            text(140, y, 30, c, "Game folder");
             path_text(y, CW - 140, 36, c, rt_game_dir);
             continue;
         }
         if (i == ROW_DISC) {
-            text(140, y, 36, c, "Game disc or file");
+            text(140, y, 30, c, "Game disc or file");
             continue;
         }
         if (i == ROW_CHECK) {
-            text(140, y, 36, c, "Check this copy");
+            text(140, y, 30, c, "Check this copy");
             continue;
         }
         if (i == ROW_IMPORT) {
-            text(140, y, 36, c, "Import a .zip download");
+            text(140, y, 30, c, "Import a .zip download");
             continue;
         }
         if (i == ROW_MOD) {
-            text(140, y, 36, c, "Install a mod");
+            text(140, y, 30, c, "Install a mod");
             continue;
         }
 #endif
-        text(140, y, 36, c, opts[i].label);
+        text(140, y, 30, c, opts[i].label);
         char v[64];
         snprintf(v, sizeof v, i == sel ? "< %s >" : "%s", opt_name(&opts[i]));
-        text(CW - 140 - text_w(36, v), y, 36, c, v);
+        text(CW - 140 - text_w(30, v), y, 30, c, v);
     }
-    text_c(654, 24, C_DIM, "Left/Right: change   A: pick   B: back (saves sh3.ini)");
-    if (row_note) text_c(690, 24, C_DIM, row_note);
+    text_c(682, 20, C_DIM, "Left/Right: change   Enter: pick   Esc: back (saves sh3.ini)");
+    if (row_note) text_c(706, 20, C_DIM, row_note);
 }
 
 /* Fades the canvas in from black, or out to black, then leaves it as it was. Input meanwhile is dropped. */
@@ -742,6 +763,10 @@ static void options(void) {
             int n = n_vals(o);
             o->cur = o->cur < 0 ? 0 : (o->cur + (in == IN_LEFT ? n - 1 : 1)) % n;
         }
+#ifndef __SWITCH__
+        /* The window changes as the row is picked, so the choice is seen before the game starts. */
+        if (sel == OPT_WINDOW && o && (in == IN_LEFT || in == IN_RIGHT || in == IN_OK)) apply_window_opt();
+#endif
 #ifdef _WIN32
         /* Both rows pick, then share the rest: rt_game_path decides what the path is and owns the wording for
          * everything that is not the game, and nothing here changes when it refuses. */
@@ -873,7 +898,7 @@ static void splash(const uint8_t *img, const uint8_t *end, Uint64 wait_ms, const
         t = SDL_GetTicks64() - t1;
         int k = t >= FADE_MS ? 256 : (int)(t * 256 / FADE_MS);  /* the text's colour from black up */
         memcpy(canvas, pic, sizeof pic);
-        text_c(CH - 40, 32, rgb(235 * k >> 8, 235 * k >> 8, 235 * k >> 8), "Press A");  /* the picture's corners are taken */
+        text_c(CH - 40, 32, rgb(235 * k >> 8, 235 * k >> 8, 235 * k >> 8), "Press Enter or A");  /* the picture's corners are taken */
         present(canvas, CW, CH);
     }
     sound(SND_OK);
@@ -928,7 +953,7 @@ static DWORD __stdcall nx_dl_thread(void *unused) {
         return 0;
     }
     nx_job.ok = nexus_fetch_main(nx_job.mod, nx_job.zip, err, sizeof err);
-    rt_log("mods: fetch %d -> %d %s", nx_job.mod, nx_job.ok, err);
+    rt_log("mods: fetch %d -> %d %s", nx_job.mod, (int)nx_job.ok, err);
     if (!nx_job.ok) snprintf(nx_job.err, sizeof nx_job.err, "%s", err);
     InterlockedExchange(&nx_job_done, 1);
     return 0;
@@ -997,7 +1022,7 @@ static void draw_mods(int sel) {
     }
     if (nx_job_done && nx_job.err[0]) wrap_text(70, 560, 18, C_DIM, nx_job.err);
     else if (nx_note[0]) wrap_text(70, 560, 18, C_DIM, nx_note);
-    text_c(668, 22, C_DIM, "A: download and install   N: open the page   R: refresh   B: back");
+    text_c(668, 22, C_DIM, "Enter: download and install   N: open the page   R: refresh   Esc: back");
     (void)sel;
 }
 
@@ -1213,10 +1238,10 @@ static void draw_updates(void) {
         text_c(268, 30, C_SEL, "The check did not work.");
         wrap_text(140, 312, 20, C_DIM, upd_err);
     }
-    if (upd_dl == 3) text_c(690, 22, C_DIM, "A: try again   B: back");
+    if (upd_dl == 3) text_c(690, 22, C_DIM, "Enter: try again   Esc: back");
     else if (upd_state == 3 && upd_dl == 0 && updater_can_install())
-        text_c(690, 22, C_DIM, "A: download and install   B: back");
-    else text_c(690, 22, C_DIM, "B: back");
+        text_c(690, 22, C_DIM, "Enter: download and install   Esc: back");
+    else text_c(690, 22, C_DIM, "Esc: back");
 }
 
 /* 1 when the update is staged and this process has to end for its files to be replaced. */
@@ -1257,6 +1282,7 @@ void launcher_run(void) {
     /* Scripted runs (SH3_KEYS) go straight to the game; SH3_LAUNCHER=1 keeps the launcher for testing it. */
     if (getenv("SH3_KEYS") && !getenv("SH3_LAUNCHER")) { rt_game_setup(); return; }
 #endif
+    ini_load();  /* before the window: fullscreen= has to be known when it is created */
     rt_window_open();
     gl_context_open();
     int fh;
@@ -1272,7 +1298,6 @@ void launcher_run(void) {
     sound_init();
     splash(splash_bmp, splash_bmp_end, 4000, SPLASH_SHA1);
     if (!credits_seen()) credits();  /* first launch: who made this port, once */
-    ini_load();
 #ifdef _WIN32
     nexus_set_key(rt_nexus_key);
     if (opts[OPT_AUTOUPDATE].cur == 0) start_check();  /* silent: the menu carries the answer when it comes */

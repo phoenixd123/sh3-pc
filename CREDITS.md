@@ -22,6 +22,10 @@ The name on the credits screen comes from the build: `cmake -DPORT_AUTHOR="Your 
 - **[sh2-nx](https://github.com/cutarev/sh2-nx) by cutarev** — the runtime this port's runtime began as.
 - **[WidescreenFixesPack](https://github.com/ThirteenAG/WidescreenFixesPack) by ThirteenAG** (MIT): the
   widescreen fix Silent Hill 3's patches come from.
+- **Steam006's Silent Hill 3 PC Fix**, **[Silent Hill 3: Rebirth](https://github.com/IvanBarbosaFilho/Silent-Hill-3-Rebirth)**
+  and the community's [16-mode options-menu patch](https://www.speedrun.com/post/unxqq) - the diagnosis of the
+  options screen's display-mode enumeration, which 1.12.0's sixteen-mode list and `WM_DISPLAYCHANGE` answer
+  reimplement here in the port's own host layer.
 - **nfsmw-nx** — the Horizon guest-memory technique the Switch build uses.
 - **[stb](https://github.com/nothings/stb) by Sean Barrett** (public domain): `stb_image` and `stb_image_write`,
   for the mod system's PNGs.

@@ -9,7 +9,7 @@ endif()
 set(PORT_AUTHOR "phoenixd123" CACHE STRING "Name shown in the launcher's credits")
 set(PORT_NAME "SH3-PC" CACHE STRING "Title shown in the launcher")
 # The version the updater compares GitHub's newest release with.
-set(PORT_VERSION "1.11.2" CACHE STRING "Version the launcher reports and updates from")
+set(PORT_VERSION "1.12.0" CACHE STRING "Version the launcher reports and updates from")
 
 file(GLOB GEN CONFIGURE_DEPENDS src/recomp/gen/*.c)
 file(GLOB RT CONFIGURE_DEPENDS src/runtime/*.c src/win32/*.c src/d3d8/*.c src/game/*.c src/mods/*.c)

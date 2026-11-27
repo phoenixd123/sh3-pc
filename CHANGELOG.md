@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.12.0 - the Options screen comes back, and a stuck screen can be closed
+
+- **The in-game Options screen no longer sits on a dimmed frame.** Two things in the host layer were wrong. The
+  port answered `EnumDisplaySettingsA` with a single mode, and that list is what the screen's resolution row is
+  built from; it now gets sixteen, 4:3 at 32 bits and 60 Hz with the resolution the port renders at first
+  (`src/runtime/display_modes.h`). That is the state every community fix forces the original executable into,
+  because it tests every mode the driver reports before the screen appears - 1100+ on a modern PC, the retail
+  game's own options-menu freeze. And a mode change is now acknowledged the way Windows acknowledges it:
+  `ChangeDisplaySettingsA` answers `DISP_CHANGE_SUCCESSFUL` and sends the window `WM_DISPLAYCHANGE`, which the
+  screen waits for before it comes back. With no message it stayed dimmed.
+- **Alt+F4 (or Alt+Q) always closes the port**, and so does closing the window: the game is asked to quit and, if
+  it does not within two seconds, the port stops itself. A stuck screen no longer leaves logging off Windows as
+  the only way out.
+- **Alt+Enter switches fullscreen and window**, and **Options > Window** (`fullscreen=1`/`0`) picks what the port
+  starts in. Fullscreen is a borderless desktop window, so the desktop mode never changes; before, the window was
+  1280x720 whatever `resolution=` said, which scaled 1080p back down into 720p. Alt+Enter keeps its answer in
+  `sh3.ini`.
+- **The Windows Options screen fits again.** Its rows began at y=190 in 56 px steps with 36 px text, so the
+  twelfth row was at 806 on a 720 px canvas: Install a mod and Back were drawn off-screen, invisible even while
+  selected. 30 px text in 42 px steps from 150 fits all thirteen rows.
+- The launcher's on-screen hints name the keys that work - `Enter: select`, `Esc: back` - instead of the pad's A
+  and B, and the warning screen says "Press Enter or A". Keyboard and pad still both work.
+- Tested: `build/modes_test.c` passes (sixteen modes, the current one first, no repeats, the DEVMODE written and
+  read back, bad sizes refused), and `build/wcheck.sh` compiles 26 units and links. In the launcher with scripted
+  keys, `fullscreen=0` logged `window: windowed` at start, and the new Window row switched it and wrote
+  `fullscreen=1` to `sh3.ini`. Not tested in the game itself: there are no game files here, so the Options screen
+  returning is checked in the host layer (the list it is given, the message it waits for), not on screen.
+
+
 ## 1.11.2 - the whole mod list, and a key that does not need a restart
 
 - **The list is the game's whole catalogue again**, not the ten newest: it comes from Nexus's v2 GraphQL API

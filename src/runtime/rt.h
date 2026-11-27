@@ -133,6 +133,8 @@ int rt_format(char *out, size_t n, const char *fmt, uint32_t args);
 extern struct SDL_Window *rt_window;
 void rt_pump_events(void);
 void rt_window_open(void);
+extern int rt_fullscreen;    /* fullscreen= in sh3.ini, Options > Window, Alt+Enter in game */
+void rt_apply_window_mode(void);
 
 /* kernel32.c */
 void rt_thread_init_main(uint32_t stack_size);
