@@ -8,7 +8,7 @@
 </div>
 <h1 align=center>Silent Hill 3 — PC (and Switch)</h1>
 
-<p align=center><b>1.12.2</b> — ported to PC by <b>phoenixd123</b></p>
+<p align=center><b>1.12.3</b> — ported to PC by <b>phoenixd123</b></p>
 
 A native, statically recompiled port of the PC version of **Silent Hill 3**, for **Windows**, Linux and the
 Nintendo Switch. It's not an emulator: the game's x86 executable is recompiled to C ahead of time, and that C is
@@ -424,6 +424,25 @@ build/linux/sh3 game
 
 On Windows the same CMake build works with MSYS2's mingw-w64 toolchain and SDL2; the details, and what the
 Windows layer does differently, are in [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md).
+
+### Tests
+
+`tests/` holds the checks that need no game files, and one command runs all of them:
+
+```sh
+bash tests/run.sh    # builds the launcher with build/wcheck.sh, then: modes, ini, watchdog, play
+```
+
+- `modes_test.c`: the display-mode list the game is offered.
+- `ini_test.c`: `rt_ini_set` on a real `sh3.ini` (the file the port rewrites on the player's disk).
+- `watchdog_test.c`: the Ctrl+Alt+End watcher, using its own binary as the stub game.
+- `play_e2e.sh`: the launcher's **Play** row end to end. `tests/stub_game.c` stands in for the copy's `sh3.exe`,
+  scripted keys walk the real menu, and the run passes only if Play starts the stub, the watcher registers, the
+  kill lands and the launcher exits 0.
+
+Three environment variables exist for those runs: `SH3_CONFIRM=yes|no` answers every yes/no box without a dialog,
+`SH3_REGISTRY_READY=1` stands in for the machine registry entry (writing it needs an administrator prompt), and
+`SH3_WATCH_KILL_MS=ms` ends the started game after that many milliseconds.
 
 ### Steam Deck
 

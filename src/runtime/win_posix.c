@@ -3,6 +3,7 @@
  * for why kernel32.c cannot. */
 #include <windows.h>
 #include "win_posix.h"
+void rt_log(const char *fmt, ...); /* rt_core.c: the test hooks below say what they answered */
 #include <shlobj.h>  /* SHBrowseForFolderA: the launcher asks for the game folder with the shell's dialog */
 #include <commdlg.h>  /* GetOpenFileNameA: and for sh3.exe or a disc with the open-file dialog */
 
@@ -201,6 +202,14 @@ int win_pick_file(const char *title, const char *start, const char *filter, char
 
 void win_message(const char *title, const char *text) { MessageBoxA(NULL, text, title, MB_OK | MB_ICONINFORMATION); }
 
+/* Testing: SH3_CONFIRM=yes or no answers every yes/no box without one, so a scripted run (SH3_KEYS) can walk the
+ * menu and the Play path's own prompts end to end (tests/play_e2e.sh). */
 int win_confirm(const char *title, const char *text) {
+    const char *answer = getenv("SH3_CONFIRM");
+    if (answer && *answer) {
+        int yes = !strcasecmp(answer, "yes");
+        rt_log("confirm: %.70s -> %s", text, yes ? "yes" : "no");
+        return yes;
+    }
     return MessageBoxA(NULL, text, title, MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES;
 }

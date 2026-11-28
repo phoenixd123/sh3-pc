@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.12.3 - the Play path tested end to end, and the tests tracked
+
+- **The launcher's Play row is tested end to end.** `tests/play_e2e.sh` puts `tests/stub_game.c` in a game folder as
+  `sh3.exe`, writes the launcher's own `sh3-pc.ini` beside a copy of the launcher, and drives the real menu with
+  scripted keys: Play, the Play path's two prompts, `CreateProcess`, the hidden launcher window, the watcher
+  registering Ctrl+Alt+End, the kill, and exit 0. The stub writes a file only if it is still alive after six
+  seconds, so a kill that did not land fails the run instead of passing quietly. That is what 1.12.2's
+  `watchdog_test.c` could not reach: this proves the menu wiring, not only `rt_watch_child`.
+- **Two test-only hooks.** `SH3_CONFIRM=yes|no` answers every yes/no box without a dialog, and
+  `SH3_REGISTRY_READY=1` stands in for the machine registry entry, which writing needs an administrator prompt for.
+  Neither does anything unless it is set, and the answer is logged as `confirm: ... -> yes` so a run's log says what
+  was answered.
+- **The tests live in `tests/`.** `modes_test.c`, `ini_test.c` and `watchdog_test.c` moved out of the ignored
+  `build/` into the repository, with `tests/run.sh` as the single runner: it builds the launcher, runs the three
+  host tests and then the Play test, and exits non-zero if any of them fails.
+- Tested: `bash tests/run.sh` passes every step; the Play run's log carries `confirm: ... -> yes`,
+  `launcher: started the copy's own ...`, `watchdog: Ctrl+Alt+End ends the game if it stops answering` and
+  `watchdog: SH3_WATCH_KILL_MS, ending the game`, and the launcher exits 0. Still not tested: the in-game Options
+  pick (no game files here) and a real Ctrl+Alt+End keystroke, which the tests reach through `SH3_WATCH_KILL_MS` and
+  a posted `WM_HOTKEY`.
+
+
 ## 1.12.2 - one owner for the resolution, and the kill tested
 
 - **One path owns the resolution pick.** 1.12.1 took an offered mode in two places: `ChangeDisplaySettingsA` and

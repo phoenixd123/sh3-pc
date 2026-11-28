@@ -1022,6 +1022,8 @@ static int on_wine(void) {
 
 static int registry_ready(const char *dir) {
     char v[700];
+    /* Testing: stands in for the machine entry, which takes an administrator prompt to write (tests/play_e2e.sh). */
+    if (getenv("SH3_REGISTRY_READY")) return 1;
     if (reg_read(HKEY_LOCAL_MACHINE, sh3_reg_sub, "installdir", v, sizeof v) && same_install_dir(v, dir)) return 1;
     if (reg_read(HKEY_LOCAL_MACHINE, sh3_reg_sub32, "installdir", v, sizeof v) && same_install_dir(v, dir)) return 1;
     return 0;  /* HKCU is only what a patched exe reads: it does not satisfy the unpatched game */
