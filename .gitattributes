@@ -8,3 +8,6 @@
 *.dll binary
 *.nsp binary
 *.bin binary
+
+# Shell scripts: LF in the working tree too, so bash runs them on Windows and Linux alike.
+*.sh text eol=lf
